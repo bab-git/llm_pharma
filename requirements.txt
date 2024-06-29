@@ -16,3 +16,7 @@ langchain_experimental == 0.0.60
 langchainhub == 0.1.18
 langgraph == 0.0.66
 pygraphviz
+gpt4all
+langchain_nomic
+unstructured
+markdown
