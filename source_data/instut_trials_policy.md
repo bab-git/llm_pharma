@@ -8,18 +8,15 @@
    - **Health Insurance**: Patients must have valid health insurance coverage.
 
 #### 2. **Medical History Restrictions**
-   - **Chronic Conditions**:
-     - Severe Heart Disease (e.g., recent myocardial infarction, heart failure)
-     - Uncontrolled Diabetes Mellitus     
-   - **Recent Surgeries**: Patients who have undergone major surgery within the last 6 months are not eligible.
-   - **Mental Health**: Patients with severe psychiatric disorders, including schizophrenia and bipolar disorder, are excluded unless the trial specifically addresses these conditions.
+   - **Severe Heart Disease** (e.g., recent myocardial infarction, heart failure)
+   - **Uncontrolled Diabetes Mellitus**     
+   - **Recent Surgeries**: Patients who have undergone major surgery within the current year are not eligible.   
    - **Infectious Diseases**: Patients with active tuberculosis, hepatitis B or C, or HIV are excluded unless the trial is specifically designed for these conditions.
 
-#### 3. **Previous Trial Participation**
-   - **Trial Washout Period**: Patients must not have participated in any other clinical trial within the last 30 days.
-   - **Trial Frequency**: Patients should not have participated in more than two clinical trials in the past year to prevent overexposure to experimental treatments.
+#### 3. **Previous Trial Participation**   
+   - **Trial Frequency**: Patients should not have participated in more than two clinical trials in the past year excluding this trial to prevent overexposure to experimental treatments.
    - **Active Trials**: Patients currently enrolled in another active trial are not eligible until they have completed or withdrawn from the ongoing trial.
-   - **Recent Trials**: Patients cannot have participated in any other clinical trial within the least 5 months prior to enrolling in a new trial to allow for proper assessment of any delayed adverse effects.
+   - **Recent Trials**: Patients cannot have participated in any other clinical trial within the current year to allow for proper assessment of any delayed adverse effects.
    - **Trial Outcomes**:
      - Patients who were withdrawn from previous trials due to adverse effects are not eligible.
      - Patients who have completed a trial must have a documented recovery period before participating in a new trial.
