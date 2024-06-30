@@ -1,0 +1,5 @@
+{
+    "leukemia": ["myelomonocytic leukemia", "myeloid leukemia", "lymphoblastic leukemia"],
+    "cancer": ["colorectal cancer", "esophageal cancer", "gastric cancer", "leiomyosarcoma", "liposarcoma", "mesothelioma", "pancreatic cancer", "myeloma", "prostate cancer", "rectal cancer", "soft tissue sarcoma", "solid tumors", "lung cancer", "ovarian cancer", "peritoneal cancer"],
+    "mental_health": ["anxiety disorder", "depressive disorder", "suicidal ideation"]
+}

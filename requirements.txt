@@ -20,3 +20,4 @@ gpt4all
 langchain_nomic
 unstructured
 markdown
+lark
