@@ -146,3 +146,32 @@ def disease_map(disease_list):
     if len(categories) == 0:
         categories.add('other_conditions')
     return list(categories)
+
+
+from langgraph.graph import StateGraph, END
+def fn_get_state(graph, thread, vernose = False, next = None):
+    states = []
+    state_next = []
+    for state in graph.get_state_history(thread):
+        if vernose:
+            print(state)
+            print('--')
+        states.append(state)
+    state_last = states[0]
+    
+    if next is not None:
+        for state in graph.get_state_history(thread):
+            if len(state.next)>0 and state.next[0]=="policy_checker":
+                state_next = state
+                break
+    return states, state_next, state_last
+
+def resume_from_state(graph, state, key, value):
+    state.values[key] = value
+    branch_state = graph.update_state(state.config, state.values)
+    print("--------- continue from modified state ---------")
+    events = []
+    for event in graph.stream(None, branch_state):    
+        events.append(event)
+        print(event)
+    return events

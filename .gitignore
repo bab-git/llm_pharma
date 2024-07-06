@@ -3,3 +3,4 @@ temp
 __pycache*
 data/
 chromadb/
+chroma_db/

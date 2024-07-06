@@ -21,3 +21,4 @@ langchain_nomic
 unstructured
 markdown
 lark
+gradio
