@@ -238,8 +238,9 @@ from langchain_openai import ChatOpenAI
 def policy_evaluator(state: AgentState, policy_doc: Document = None):
     if policy_doc is None:
         policy_doc = state['unchecked_policies'][0]
-
-    print(f'Evaluating Policy: {policy_doc.page_content}')
+    
+    policy_header = policy_doc.page_content.split('\n', 2)[1]
+    print(f'Evaluating Policy:\n {policy_header}')
     
     policy = policy_doc.page_content
 
@@ -445,7 +446,7 @@ def policy_evaluator(state: AgentState, policy_doc: Document = None):
         
 
     
-
+    
     state["policy_eligible"] = response.tool_calls[0]['args']['eligibility'] == 'yes'
     state["rejection_reason"] = response.tool_calls[0]['args']['reason']
 
@@ -456,5 +457,6 @@ def policy_evaluator(state: AgentState, policy_doc: Document = None):
     state['unchecked_policies'].pop(0)
     state["revision_number"] = state.get("revision_number", 1) + 1
     state['checked_policy'] = policy_doc
+    state['last_node'] = 'policy_evaluator'
 
     return state
