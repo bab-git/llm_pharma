@@ -16,7 +16,7 @@
 #### 3. **Previous Trial Participation**   
    - **Trial Frequency**: Patients should not have participated in more than two clinical trials in the past year excluding this trial to prevent overexposure to experimental treatments.
    - **Active Trials**: Patients currently enrolled in another active trial are not eligible until they have completed or withdrawn from the ongoing trial.
-   - **Recent Trials**: Patients cannot have participated in any other clinical trial within the current year to allow for proper assessment of any delayed adverse effects.
+   - **Recent Trials**: Patients cannot have participated in any other clinical trial within the past 5 months from now.
    - **Trial Outcomes**:
      - Patients who were withdrawn from previous trials due to adverse effects are not eligible.
      - Patients who have completed a trial must have a documented recovery period before participating in a new trial.
