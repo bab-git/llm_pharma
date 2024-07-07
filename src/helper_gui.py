@@ -312,7 +312,7 @@ class trials_gui( ):
                     nnode_bx = gr.Textbox(label="next node", min_width=100)
                     threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80)
                     # revision_bx = gr.Textbox(label="Draft Rev", scale=0, min_width=80)
-                    count_bx = gr.Textbox(label="revision_number", scale=0, min_width=80)
+                    count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110)
                 with gr.Accordion("Manage Agent", open=False):
                     checks = list(self.graph.nodes.keys())
                     checks.remove('__start__')
