@@ -21,8 +21,12 @@ class trials_gui( ):
         #global response, max_iterations, iterations, threads
         if start:
             self.iterations.append(0)
-            config = {'patient_prompt': patient_prompt,"max_revisions": 10,"revision_number": 0,
-                      'last_node': ""}
+            config = {
+                'patient_prompt': patient_prompt,
+                "max_revisions": 10,
+                "revision_number": 0,
+                "max_trial_searches": 3,
+                'last_node': ""}
             self.thread_id += 1  # new agent, new thread
             self.threads.append(self.thread_id)
         else:
@@ -219,6 +223,9 @@ class trials_gui( ):
             elif last_node == 'grade_trials':
                 asnode = 'trial_search'
                 i_state = 1                
+            elif last_node == 'profile_rewriter':
+                asnode = None
+                i_state = 0
             else:
                 raise ValueError(f"unexpected last node {last_node}")
             current_values = current_states[i_state]
