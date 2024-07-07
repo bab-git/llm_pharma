@@ -25,6 +25,7 @@ class trials_gui( ):
                 'patient_prompt': patient_prompt,
                 "max_revisions": 10,
                 "revision_number": 0,
+                "trial_searches": 0,
                 "max_trial_searches": 3,
                 'last_node': ""}
             self.thread_id += 1  # new agent, new thread
@@ -224,7 +225,7 @@ class trials_gui( ):
                 asnode = 'trial_search'
                 i_state = 1                
             elif last_node == 'profile_rewriter':
-                asnode = None
+                asnode = 'profile_rewriter'
                 i_state = 0
             else:
                 raise ValueError(f"unexpected last node {last_node}")
@@ -281,6 +282,7 @@ class trials_gui( ):
                         prompt_bx : current_state.values["patient_prompt"],
                         last_node : current_state.values["last_node"],
                         count_bx : current_state.values["revision_number"],
+                        search_bx : current_state.values["trial_searches"],
                         # revision_bx : current_state.values["revision_number"],
                         nnode_bx : current_state.next,
                         eligible_bx : current_state.values["policy_eligible"],
@@ -310,7 +312,7 @@ class trials_gui( ):
             
             with gr.Tab("Agent"):
                 with gr.Row():
-                    prompt_bx = gr.Textbox(label="Patient Prompt", value="Is patient_ID 2 eligible for any medical trial?")
+                    prompt_bx = gr.Textbox(label="Patient Prompt", value="Is patient_ID 56 eligible for any medical trial?")
                     gen_btn = gr.Button("Start Evaluation", scale=0,min_width=80, variant='primary')
                     cont_btn = gr.Button("Continue Evaluation", scale=0,min_width=80)
                 with gr.Row():
@@ -318,7 +320,7 @@ class trials_gui( ):
                     eligible_bx = gr.Textbox(label="Eligible Patient", min_width=100)
                     nnode_bx = gr.Textbox(label="next node", min_width=100)
                     threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80)
-                    # revision_bx = gr.Textbox(label="Draft Rev", scale=0, min_width=80)
+                    search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110)
                     count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110)
                 with gr.Accordion("Manage Agent", open=False):
                     checks = list(self.graph.nodes.keys())
@@ -330,7 +332,7 @@ class trials_gui( ):
                 live = gr.Textbox(label="Live Agent Output", lines=10, max_lines=10)
         
                 # actions
-                sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,count_bx,step_pd,thread_pd]
+                sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,count_bx,step_pd,thread_pd, search_bx]
                 # sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,revision_bx,count_bx,step_pd,thread_pd]
                 thread_pd.input(self.switch_thread, [thread_pd], None).then(
                                 fn=updt_disp, inputs=None, outputs=sdisps)
