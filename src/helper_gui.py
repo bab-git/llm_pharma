@@ -37,10 +37,10 @@ class trials_gui( ):
             self.response = self.graph.invoke(config, self.thread)
             self.iterations[self.thread_id] += 1
             self.partial_message += str(self.response)
-            self.partial_message += f"\n------------------\n\n"
+            self.partial_message += f"\n {40*'========='}\n\n"
             ## fix
             last_node,nnode,_,rev,acount = self.get_disp_state()
-            yield self.partial_message,last_node,nnode,self.thread_id,rev,acount
+            yield self.partial_message,last_node,nnode,self.thread_id,rev,acount,
             config = None #need
             #print(f"run_agent:{last_node}")
             if not nnode:  
@@ -316,9 +316,9 @@ class trials_gui( ):
                     gen_btn = gr.Button("Start Evaluation", scale=0,min_width=80, variant='primary')
                     cont_btn = gr.Button("Continue Evaluation", scale=0,min_width=80)
                 with gr.Row():
-                    last_node = gr.Textbox(label="last node", min_width=100)
-                    eligible_bx = gr.Textbox(label="Eligible Patient", min_width=100)
-                    nnode_bx = gr.Textbox(label="next node", min_width=100)
+                    last_node = gr.Textbox(label="last node", min_width=150)
+                    eligible_bx = gr.Textbox(label="Eligible Patient", min_width=50)
+                    nnode_bx = gr.Textbox(label="next node", min_width=150)
                     threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80)
                     search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110)
                     count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110)
@@ -329,7 +329,7 @@ class trials_gui( ):
                     with gr.Row():
                         thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0)
                         step_pd = gr.Dropdown(choices=['N/A'],interactive=True, label="select step", min_width=160, scale=1)
-                live = gr.Textbox(label="Live Agent Output", lines=10, max_lines=10)
+                live = gr.Textbox(label="Live Agent Output", lines=50, max_lines=50)
         
                 # actions
                 sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,count_bx,step_pd,thread_pd, search_bx]
