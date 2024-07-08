@@ -92,7 +92,6 @@ Retrieval-Augmented Generation (RAG) is a powerful technique that combines the s
   - Window-based, hierarchical retrieval, and MAP-RERANK to expand input length of RAG pipelines
   - Graph RAG
 
-
 ## Agents and Tools
 
 Large Language Model (LLM) agents are crucial for creating dynamic, interactive, and context-aware applications. These agents can handle complex tasks by understanding and generating human-like text, making them invaluable in automating processes, providing intelligent responses, and integrating with various tools and services to perform specific actions. By leveraging LLM agents, developers can build robust applications that offer enhanced user experiences and operational efficiencies.
@@ -101,6 +100,17 @@ Large Language Model (LLM) agents are crucial for creating dynamic, interactive,
   - An LLM agent that calls a single Python interpreter tool
   - A ReAct-based LLM agent that uses two built-in tools, a calculator and a Wikipedia search
   - User-defined agent and its tools
+  - **Based on Langchain v0.1**: Create a separate venv
+
+- **[# LLM Agents for Clinical Trial Management](notebooks/Agents_and_Tools/llm_agents_pharma.ipynb)**
+  - An agentic LLM application that automates the evaluation of patient for clinical trials.
+  - Patient database, Trial database, Participatient policies.
+  - RAG, Tool calling, Langgraph, Hallucination grader.
+  - **Based on Langchain v0.2**: Create a separate venv
+  
+
+  - <img src="notebooks/Agents_and_Tools/graph.png" alt="Description of the image" width="500"/>
+
 
 ## Installation
 First, clone the repository:
