@@ -100,13 +100,13 @@ Large Language Model (LLM) agents are crucial for creating dynamic, interactive,
   - An LLM agent that calls a single Python interpreter tool
   - A ReAct-based LLM agent that uses two built-in tools, a calculator and a Wikipedia search
   - User-defined agent and its tools
-  - **Based on Langchain v0.1**: Create a separate venv
+  - **Based on [Langchain v0.1](https://python.langchain.com/v0.1/docs/get_started/introduction)**: Create a separate venv
 
 - **[# LLM Agents for Clinical Trial Management](notebooks/Agents_and_Tools/llm_agents_pharma.ipynb)**
   - An agentic LLM application that automates the evaluation of patient for clinical trials.
   - Patient database, Trial database, Participatient policies.
   - RAG, Tool calling, Langgraph, Hallucination grader.
-  - **Based on Langchain v0.2**: Create a separate venv
+  - **Based on [Langchain v0.2](https://python.langchain.com/v0.2/docs/introduction/)**: Create a separate venv
   
 
   - <img src="notebooks/Agents_and_Tools/graph.png" alt="Description of the image" width="500"/>
