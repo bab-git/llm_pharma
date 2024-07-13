@@ -86,6 +86,10 @@ Retrieval-Augmented Generation (RAG) is a powerful technique that combines the s
   - **Case Study:**
     - Information retrieval from the Amazon Product Catalog
 
+- **Corrective RAG, Self RAG**
+  - The sample application of Corrective RAG and Self RAG can be found in this [Agentic LLM Demo Application](notebooks/Agents_and_Tools/llm_agents_pharma.ipynb)
+  - Equiped with query re-writing, Retrival grader, and Hallucination guardrail.
+
 - **Coming Soon:**
   - Ranking retrieved documents using similarity scores
   - Using UMAP to visualize retrieved document similarity
@@ -106,7 +110,8 @@ Large Language Model (LLM) agents are crucial for creating dynamic, interactive,
   - [Demo videos on YouTube.](https://www.youtube.com/playlist?list=PLMtE8Mev6Cct7n4NRsKVTgP8N5IzDSjbq)
   - An agentic LLM application that automates the evaluation of patient for clinical trials.
   - Patient database, Trial database, Participatient policies.
-  - RAG, Tool calling, Langgraph, Hallucination grader.
+  - Corrective RAG, Self RAG
+  - Tool calling, Langgraph, Hallucination grader.
   - **Based on [Langchain v0.2](https://python.langchain.com/v0.2/docs/introduction/)**: Create a separate venv
    
 
