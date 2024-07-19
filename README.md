@@ -2,7 +2,8 @@
 
 ## Overview
 
-The goal of this repository is to provide a collection of applications that can be used with Large Language Models (LLMs). These applications serve as starting points for building advanced LLM products. The material collected here is sourced from public resources, including GitHub repositories and various courses.
+The goal of this repository is to provide a collection of architectures and techniques for leveraging Large Language Models (LLMs). 
+These sample applications serve as starting points for building advanced LLM products. The material collected here is sourced from public resources, including public GitHub repositories and various courses.
 
 As the technology evolves, some packages and tools may become outdated. However, efforts will be made to update this repository with new tools and technologies whenever possible. At the very least, these notebooks demonstrate the product-level possibilities available for leveraging LLMs.
 
