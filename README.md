@@ -56,25 +56,6 @@ The pipeline is designed to leverage agentic workflows and provides the followin
 - Hallucination Guardrails
 - Retrieval Grader
 
-## Potential Future Improvements
-
-To achieve a more robust real-world application, especially for managing diverse patient and trial conditions, the following enhancements are recommended:
-
-1. **Graph-Based Retrieval-Augmented Generation (RAG)**
-   - Implement graph-based RAG to leverage relationships between entities like patients, diseases, drugs, and trials, thus improving information retrieval.
-
-2. **Advanced RAG Pipeline**
-   - Use methods such as Adaptive RAG, Corrective RAG, and Self-RAG to enhance output quality and robustness, minimizing LLM hallucinations and inference errors.
-
-3. **Advanced Chain of Thought Processing**
-   - Implement more sophisticated multi-factor matching of patient profiles with trials to enable more nuanced decision-making.
-
-4. **Fine-Tuning of LLMs**
-   - Fine-tune the language model with clinical trial datasets to better understand nuances, enhancing both the accuracy and context relevance of its inferences.
-
-5. **Cyclic Graphs for Iterative Evaluation**
-   - Utilize cyclic graphs for iterative profile evaluations against multiple trials and policies, refining matches in multiple iterations to find the best fit for patients.
-
 ## How to Run
 
 ### Requirements
@@ -100,6 +81,26 @@ To achieve a more robust real-world application, especially for managing diverse
 - Run the notebook in the `notebooks/` directory to explore various components of the agent-based application step by step, including Patient Evaluation, Compliance Verification, and Trial Matching.
 - At the end of the notebook, the complete solution can be run using a gradio dashboard.
   - Navigate to the provided URL (usually `http://127.0.0.1:7958`) to access the dashboard.
+
+
+## Potential Future Improvements
+
+To achieve a more robust real-world application, especially for managing diverse patient and trial conditions, the following enhancements are recommended:
+
+1. **Graph-Based Retrieval-Augmented Generation (RAG)**
+   - Implement graph-based RAG to leverage relationships between entities like patients, diseases, drugs, and trials, thus improving information retrieval.
+
+2. **Advanced RAG Pipeline**
+   - Use methods such as Adaptive RAG, Corrective RAG, and Self-RAG to enhance output quality and robustness, minimizing LLM hallucinations and inference errors.
+
+3. **Advanced Chain of Thought Processing**
+   - Implement more sophisticated multi-factor matching of patient profiles with trials to enable more nuanced decision-making.
+
+4. **Fine-Tuning of LLMs**
+   - Fine-tune the language model with clinical trial datasets to better understand nuances, enhancing both the accuracy and context relevance of its inferences.
+
+5. **Cyclic Graphs for Iterative Evaluation**
+   - Utilize cyclic graphs for iterative profile evaluations against multiple trials and policies, refining matches in multiple iterations to find the best fit for patients.
 
 ## License
 
