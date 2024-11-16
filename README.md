@@ -1,6 +1,6 @@
 # LLM Agents for Clinical Trial Management
 
-<image src="images/dashboard_complete.jpg" alt="Pipeline Diagram" width="1000"/>
+<image src="images/dash_complete.png" alt="Pipeline Diagram" width="1000"/>
 
 ## Overview
 
@@ -25,7 +25,7 @@ The application workflow involves the following core components:
 6. **Human-in-the-Loop Interventions**: Enable clinical experts to review and refine intermediate and final outcomes.
 
 ## Visual Representation of the Pipeline:
-<image src="images/diagram.png" alt="Pipeline Diagram" width="700"/>
+<image src="images/diagram.png" alt="Pipeline Diagram" width="900"/>
 
 ## Pipeline Architecture
 
