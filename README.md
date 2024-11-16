@@ -1,6 +1,6 @@
 # LLM Agents for Clinical Trial Management
 
-<image src="images/dashboard.png" alt="Pipeline Diagram" width="700"/>
+<image src="images/dashboard_complete.jpg" alt="Pipeline Diagram" width="1000"/>
 
 ## Overview
 
@@ -97,7 +97,9 @@ To achieve a more robust real-world application, especially for managing diverse
 3. Set the required environment variables for API access.
 
 ### Usage
-- Run the notebook in the `notebooks/` directory to explore various components of the agent-based application, including Patient Evaluation, Compliance Verification, and Trial Matching.
+- Run the notebook in the `notebooks/` directory to explore various components of the agent-based application step by step, including Patient Evaluation, Compliance Verification, and Trial Matching.
+- At the end of the notebook, the complete solution can be run using a gradio dashboard.
+  - Navigate to the provided URL (usually `http://127.0.0.1:7958`) to access the dashboard.
 
 ## License
 
@@ -108,4 +110,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 We welcome contributions! Please feel free to open issues or submit pull requests for suggestions, improvements, or bug fixes. For significant contributions, please discuss the changes via an issue before submitting.
 
 ## Contact
-For more information, questions, or feedback, please contact the repository maintainer via GitHub issues or discussions.
+For more information, questions, or feedback, please contact me at [https://www.linkedin.com/in/bhosseini/](https://www.linkedin.com/in/bhosseini/). 
