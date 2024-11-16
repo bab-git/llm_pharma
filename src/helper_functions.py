@@ -84,7 +84,7 @@ def dataset_create_trials(status = None):
         - The 'label' column of the DataFrame is mapped to the strings 'success' if the value is 1, and 'failure' if the value is 0.
         - The 'why_stop' column of the DataFrame is filled with the string 'not stopped' where the value is null.
         - The 'smiless' and 'icdcodes' columns of the DataFrame are dropped.
-        - The preprocessed DataFrame is saved to a CSV file located at '../../data/trials_data.csv'.
+        - The preprocessed DataFrame is saved to a CSV file located at '../data/trials_data.csv'.
         - The path to the saved CSV file is stored in the 'csv_path' variable.
         - The function prints the path to the saved CSV file and the number of rows in the DataFrame.
     """
@@ -114,8 +114,13 @@ def dataset_create_trials(status = None):
     # df_trials.head()
     
     df_trials = df_trials.drop(columns=['smiless','icdcodes'])
-    df_trials.to_csv('../../data/trials_data.csv', index=False)
-    csv_path = '../../data/trials_data.csv'
+
+    # create ../data if it doesn't exist
+    if not os.path.exists('../data'):
+        os.makedirs('../data')
+        
+    df_trials.to_csv('../data/trials_data.csv', index=False)
+    csv_path = '../data/trials_data.csv'
     print(f'The database for trials is saved to {csv_path} \n It has {len(df_trials)} rows.')
     
     return df_trials, csv_path
@@ -126,7 +131,7 @@ def disease_map(disease_list):
     # read disease_mapping from a file    
     import json
     
-    with open('../../source_data/disease_mapping.json', 'r') as file:
+    with open('../source_data/disease_mapping.json', 'r') as file:
         disease_mapping =  json.load(file)
 
     categories = set()

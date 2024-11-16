@@ -1,24 +1,25 @@
-pandas
-pypdf
-ipykernel
-python-dotenv
-openai
-numexpr
-langchain == 0.2.3
-langchain_community == 0.2.4
-langchain-openai == 0.1.8
-docarray == 0.40.0
-sentence-transformers == 3.0.1
-chromadb == 0.5.0
-pinecone == 4.0.0
-wikipedia == 1.4.0
-langchain_experimental == 0.0.60
-langchainhub == 0.1.18
-langgraph == 0.0.66
-pygraphviz
-gpt4all
-langchain_nomic
-unstructured
-markdown
-lark
-gradio
+chromadb==0.5.0
+fastapi==0.111.0
+gpt4all==2.7.0
+gradio==4.36.1
+ipykernel==6.29.4
+langchain==0.2.3
+langchain-community==0.2.4
+langchain-core==0.2.5
+langchain-nomic==0.1.2
+langchain-openai==0.1.8
+langgraph==0.0.66
+langsmith==0.1.77
+lark==1.1.9
+matplotlib==3.9.0
+matplotlib-inline==0.1.7
+nomic==3.0.33
+numpy==1.26.4
+pandas==2.2.2
+pillow==10.3.0
+pydantic_core==2.18.4
+pygraphviz==1.13
+python-dotenv==1.0.1
+requests==2.32.3
+starlette==0.37.2
+uvicorn==0.30.1

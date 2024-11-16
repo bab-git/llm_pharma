@@ -1,158 +1,111 @@
-# LLM Tutorials and Applications
+# LLM Agents for Clinical Trial Management
+
+<image src="images/dashboard.png" alt="Pipeline Diagram" width="700"/>
 
 ## Overview
 
-The goal of this repository is to provide a collection of architectures and techniques for leveraging Large Language Models (LLMs). 
-These sample applications serve as starting points for building advanced LLM products. The material collected here is sourced from public resources, including various repositories and courses.
+This repository provides an agent-based Large Language Model (LLM) application designed to automate the evaluation of patients for clinical trials. 
+By leveraging documents related to patients' medical histories, clinical policies, and trial inclusion criteria, this agentic system aims to enhance evaluation quality and reduce processing time, offering a glimpse into how advanced LLMs can revolutionize clinical trial management.
 
-As the technology evolves, some packages and tools may become outdated. However, efforts will be made to update this repository with new tools and technologies whenever possible. At the very least, these notebooks demonstrate the product-level possibilities available for leveraging LLMs.
+The project uses a limited demo dataset and simple agentic tools for demonstration purposes. 
+To translate this concept into real-world clinical environments, comprehensive databases, clinical expertise, and advanced toolsets (such as Retrieval-Augmented Generation (RAG)) will be necessary.
 
-## Table of Contents
-- [Fundamentals](#fundamentals)
-- [Retrieval-Augmented Generation (RAG)](#retrieval-augmented-generation-rag)
-- [Agents and Tools](#agents-and-tools)
-- [Case Studies](#case-studies)
-- [Installation](#installation)
-- [Contributing](#contributing)
-- [License](#license)
+### Objective
+- **Automate clinical trial data management, analysis, compliance checks, and reporting.**
 
-## Case Studies:
-In the following notebooks, different databases and practical use cases are presented. The purpose is to expand your imagination towards the broad applications of LLMs in different domains. These sample scenarios include:
-- Technical support as a chatbot technician
-- Entity extraction from customer travel queries
-- Customer support
-- Healthcare consultation
-- Patient inquiry analysis
-- Patient symptom categorization
-- Search and summary of clinical trials
-- Search and retrieve information from the Novartis 2023 annual report
-- Information retrieval from the Amazon Product Catalog
+## Key Components
 
-## Fundamentals
-The Fundamentals section covers the essential concepts and techniques for working with Large Language Models (LLMs). This section provides a solid foundation for understanding and utilizing LLMs, including topics such as chatbots, conversational agents, chains, prompt templates, and output parsers. By exploring these basics, you will gain the necessary skills to build simple to advanced applications that leverage the power of LLMs for various conversational tasks and QA systems.
+The application workflow involves the following core components:
 
-This section covers general topics related to QA, chatbots, chains, and other conversational topics with LLMs, ranging from simple to advanced.
+1. **Patient Data Collection**: Gather and manage comprehensive medical histories and patient information.
+2. **Patient Data Analysis**: Analyze patient data to identify key health indicators and relevant medical conditions.
+3. **Clinical Compliance Verification**: Ensure patient data meets clinical policies and trial eligibility criteria.
+4. **Trial Matching**: Match patients with suitable clinical trials based on their medical profiles.
+5. **Hallucination Grader**: Guardrail the LLM outputs to ensure relevance and accuracy, preventing hallucinations.
+6. **Human-in-the-Loop Interventions**: Enable clinical experts to review and refine intermediate and final outcomes.
 
-- **[Introduction and Basics of Chatbots and Conversational Agents](notebooks/Fundamentals/QA_chatbot.ipynb)**
-  - A direct API call from OpenAI to perform chat completions
-  - Chat completions with LangChain APIs
-  - Using prompt templates to create custom prompts
-  - Using output parsers to extract key information from completions
-  - **Use Cases:**
-    - Technical support as a chatbot technician
-    - Entity extraction from customer travel queries
+## Visual Representation of the Pipeline:
+<image src="images/diagram.png" alt="Pipeline Diagram" width="700"/>
 
-- **[Using Memory to Have an Interactive Conversational Chatbot](notebooks/Fundamentals/QA_chatbot_memory.ipynb)**
-  - Complete memory recording
-  - Window-based memory
-  - Summary-based memory
-  - **Use Cases:**
-    - Technical support
-    - Customer support
-    - Healthcare consultation
+## Pipeline Architecture
 
-- **[Using LangChain to Generate LLM Chains](notebooks/Fundamentals/llm_chains.ipynb)**
-  - Introduction to chains
-  - LLMChain and Language Execution Chain (LEC)
-  - Intermediate outputs in chains
-  - **Use Cases:**
-    - Patient inquiry analysis
-    - Patient symptom categorization
+The pipeline is designed to leverage agentic workflows and provides the following functionality:
 
-- **Coming Soon:**
-  - Using few-shot chains to instruct LLMs
-  - Numerical evaluation metrics: BLEU, ROUGE, METEOR, CER
+- **Local Embedding Models**: Patient data and trial information are embedded locally for enhanced privacy and accuracy.
+- **Vector Stores for Information Retrieval**: Metadata-based retrieval ensures relevant information is found efficiently.
+- **Chained LLM Calls**: Complex tasks are handled through a sequence of LLM prompts, each building on the previous output.
+- **Agentic Graph Workflow**: Graph-based workflows evaluate patient eligibility in a structured and transparent manner.
+- **Human-in-the-Loop Functionality**: Clinical experts can intervene at any stage, ensuring that automated evaluations are accurate and contextually relevant.
+- **Hallucination Prevention**: Utilizes a hallucination grader to maintain high-quality LLM responses.
 
+## Technologies and Tools
 
-## Retrieval-Augmented Generation (RAG)
+- **Local Models**: To embed policies and trial information securely.
+- **Local Vector Stores**: Metadata-based retrieval, ensuring quick and contextually accurate data access.
+- **Python Shell Integration**: For numerical calculations required during trial evaluation.
+- **Langchain-based LLM Chains**: To handle complex, multi-step tasks.
+- **Graph Workflows for Patient-Trial Matching**: Improves transparency and ensures structured decision-making.
+- **Human-in-the-Loop for Validation**: Clinical experts are involved to provide oversight and make corrections where necessary.
 
-Retrieval-Augmented Generation (RAG) is a powerful technique that combines the strengths of information retrieval and natural language generation. By integrating retrieval mechanisms with LLMs, RAG can access and utilize vast amounts of external knowledge, enabling the generation of more accurate, contextually relevant, and informative responses. This approach is particularly useful for tasks requiring up-to-date information, detailed explanations, or specific data points, significantly enhancing the capabilities and performance of LLM-based applications.
+## Demonstration Video
 
-- **[Question and Answering (QA) Over Documents Using RAG](notebooks/Retrieval_Augmented_Generation/RAG_basic.ipynb)**
-  - A simple in-memory RAG application using LangChain based on a CSV file
-  - **Use Case:**
-    - Search and summary of clinical trials
+[Watch our demo videos on YouTube](https://www.youtube.com/playlist?list=PLMtE8Mev6Cct7n4NRsKVTgP8N5IzDSjbq) to see the application in action, including functionalities like:
+- Patient Profile (Re-)generation
+- Policy Evaluation
+- Human in-the-Loop Interventions
+- Hallucination Guardrails
+- Retrieval Grader
 
-- **[RAG Application Using Persistent and Cloud-Based Vector Stores](notebooks/Retrieval_Augmented_Generation/RAG_vectorstores.ipynb)**
-  - Using a public embedding model from Hugging Face
-  - Applying chunking strategy for analyzing large documents
-  - Using a persistent vector store from Chroma DB
-  - A cloud-based vector store from Pinecone
-  - **Case Study:**
-    - Search and retrieve information from the Novartis 2023 annual report
+## Potential Future Improvements
 
-- **[Evaluation of Retrieval-Augmented Generation Using QAGenerator](notebooks/Retrieval_Augmented_Generation/RAG_evaluation.ipynb)**
-  - Using QAGenerator to create ground truth samples for QA applications
-  - Evaluating QA-based RAG using QAGeneratorChain and QAEvalChain
-  - **Case Study:**
-    - Information retrieval from the Amazon Product Catalog
+To achieve a more robust real-world application, especially for managing diverse patient and trial conditions, the following enhancements are recommended:
 
-- **Corrective RAG, Self RAG**
-  - The sample application of Corrective RAG and Self RAG can be found in this [Agentic LLM Demo Application](notebooks/Agents_and_Tools/llm_agents_pharma.ipynb)
-  - Equiped with query re-writing, Retrival grader, and Hallucination guardrail.
+1. **Graph-Based Retrieval-Augmented Generation (RAG)**
+   - Implement graph-based RAG to leverage relationships between entities like patients, diseases, drugs, and trials, thus improving information retrieval.
 
-- **Coming Soon:**
-  - Ranking retrieved documents using similarity scores
-  - Using UMAP to visualize retrieved document similarity
-  - Window-based, hierarchical retrieval, and MAP-RERANK to expand input length of RAG pipelines
-  - Graph RAG
+2. **Advanced RAG Pipeline**
+   - Use methods such as Adaptive RAG, Corrective RAG, and Self-RAG to enhance output quality and robustness, minimizing LLM hallucinations and inference errors.
 
-## Agents and Tools
+3. **Advanced Chain of Thought Processing**
+   - Implement more sophisticated multi-factor matching of patient profiles with trials to enable more nuanced decision-making.
 
-Large Language Model (LLM) agents are crucial for creating dynamic, interactive, and context-aware applications. These agents can handle complex tasks by understanding and generating human-like text, making them invaluable in automating processes, providing intelligent responses, and integrating with various tools and services to perform specific actions. By leveraging LLM agents, developers can build robust applications that offer enhanced user experiences and operational efficiencies.
+4. **Fine-Tuning of LLMs**
+   - Fine-tune the language model with clinical trial datasets to better understand nuances, enhancing both the accuracy and context relevance of its inferences.
 
-- **[Agent-Based Application of Large Language Models](notebooks/Agents_and_Tools/llm_agents_basics.ipynb)**
-  - An LLM agent that calls a single Python interpreter tool
-  - A ReAct-based LLM agent that uses two built-in tools, a calculator and a Wikipedia search
-  - User-defined agent and its tools
-  - **Based on [Langchain v0.1](https://python.langchain.com/v0.1/docs/get_started/introduction)**: Create a separate venv
+5. **Cyclic Graphs for Iterative Evaluation**
+   - Utilize cyclic graphs for iterative profile evaluations against multiple trials and policies, refining matches in multiple iterations to find the best fit for patients.
 
-- **[LLM Agents for Clinical Trial Management](notebooks/Agents_and_Tools/llm_agents_pharma.ipynb)**
-  - [Demo videos on YouTube.](https://www.youtube.com/playlist?list=PLMtE8Mev6Cct7n4NRsKVTgP8N5IzDSjbq)
-  - An agentic LLM application that automates the evaluation of patient for clinical trials.
-  - Patient database, Trial database, Participatient policies.
-  - Corrective RAG, Self RAG
-  - Tool calling, Langgraph, Hallucination grader.
-  - **Based on [Langchain v0.2](https://python.langchain.com/v0.2/docs/introduction/)**: Create a separate venv
-   
+## How to Run
 
-  - <img src="notebooks/Agents_and_Tools/graph.png" alt="Description of the image" width="500"/>
+### Requirements
+- **Python 3.8+** or higher as needed to install langchain 0.2.3.
+- **pip** for installing dependencies.
+- Set up API keys for OpenAI, Pinecone, Hugging Face, and Tavily (if applicable).
 
+### Installation
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/bab-git/llm-pharma.git
+   cd llm-pharma
+   ```
 
-## Installation
-First, clone the repository:
-```bash
-git clone https://github.com/bab-git/llm-tutorials.git
+2. Install dependencies using the provided `requirements.txt` file:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-cd llm-tutorials
-```
+3. Set the required environment variables for API access.
 
-Then install the dependencies:
-Here, we use the provided `requirements.txt` file. But for more complex applications use poetry to install the dependencies.
-
-```bash
-pip install -r requirements.txt
-```
-
-**Note:**
-The notebooks presented in this repository use the package versions as stated in the `requirements.txt` file. However, some Langchain packages might become deprecated over time, and you may need to update them. To ensure you have the latest versions, you may also need to run:
-```bash
-pip install -U langchain langchain-community langgraph <or other packages>
-```
-In case of updating package, you may also need to update parts of the codes in the notebooks based on the latest package versions.
-
-**Requirements:**   
-Make sure you have the following dependencies installed:
-- Python 3.8 or higher
-- pip
-
-## Secrets
-You need to set a few API keys as environment variables to use Openai, Pinecone, Hugging Face, and Tavily via API calls.
-
-For the above services you also need to create the relevant accounts on their websites.
-
-Using LangSmith (and adding its env variables) is optional, but it is highly recommended for training and development purposes.  
+### Usage
+- Run the notebook in the `notebooks/` directory to explore various components of the agent-based application, including Patient Evaluation, Compliance Verification, and Trial Matching.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+
+## Contributing
+
+We welcome contributions! Please feel free to open issues or submit pull requests for suggestions, improvements, or bug fixes. For significant contributions, please discuss the changes via an issue before submitting.
+
+## Contact
+For more information, questions, or feedback, please contact the repository maintainer via GitHub issues or discussions.
