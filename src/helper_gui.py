@@ -281,6 +281,16 @@ class trials_gui( ):
     def create_interface(self):
         with gr.Blocks(theme=gr.themes.Default(spacing_size='sm',text_size="sm")) as demo:
             
+            # Add app description at the very top, before any tabs
+            app_description = gr.Markdown(
+                value="""## 🏥 Clinical Trial Eligibility Assistant
+
+**Purpose:** This AI-powered application helps healthcare professionals evaluate patient eligibility for clinical trials by analyzing patient data, reviewing trial policies, and matching patients with appropriate studies.
+
+**How it works:** The system uses a multi-stage evaluation process to assess patient compatibility with available clinical trials, ensuring both patient safety and trial requirements are met.""",
+                visible=True
+            )
+            
             def updt_disp():
                 ''' general update display on state change '''
                 current_state = self.graph.get_state(self.thread)
@@ -317,6 +327,13 @@ class trials_gui( ):
                     policy_eligible = current_state.values.get("policy_eligible")
                     notification = self.get_tab_notification(current_state.values["last_node"], policy_eligible)
                     
+                    if current_state.values["policy_eligible"] == True:
+                        eligible_bx_value = "✅ Yes"
+                    elif current_state.values["policy_eligible"] == False:
+                        eligible_bx_value = "❌ No"
+                    else:
+                        eligible_bx_value = "❓ Not determined"
+
                     return {
                         prompt_bx : current_state.values["patient_prompt"],
                         tab_notification: gr.update(value=notification, visible=True),
@@ -325,7 +342,7 @@ class trials_gui( ):
                         search_bx : current_state.values["trial_searches"],
                         # revision_bx : current_state.values["revision_number"],
                         nnode_bx : current_state.next,
-                        eligible_bx : current_state.values["policy_eligible"],
+                        eligible_bx : eligible_bx_value,
                         threadid_bx : self.thread_id,
                         thread_pd : gr.Dropdown(label="choose thread", choices=self.threads, value=self.thread_id,interactive=True),
                         step_pd : gr.Dropdown(label="update_state from: thread:revision_number:last_node:next_node:rev:thread_ts", 
@@ -351,33 +368,18 @@ class trials_gui( ):
                 return(gr.update(variant=stat))
             
             with gr.Tab("Agent"):
-                # Add app description at the very top
-                app_description = gr.Markdown(
-                    value="""## 🏥 Clinical Trial Eligibility Assistant
-
-**Purpose:** This AI-powered application helps healthcare professionals evaluate patient eligibility for clinical trials by analyzing patient data, reviewing trial policies, and matching patients with appropriate studies.
-
-**How it works:** The system uses a multi-stage evaluation process to assess patient compatibility with available clinical trials, ensuring both patient safety and trial requirements are met.""",
-                    visible=True
-                )
-                
-                # Add informative text at the top of the Agent tab
+                # Concise agent tab explanation
                 agent_info = gr.Markdown(
                     value="""## 🤖 Agent Control Center
 
-**🚀 Start here first** - This is your main control tab for patient evaluation.
+**🚀 Start here:** Enter patient query → Click 'Start Evaluation' → Monitor progress via notifications
 
-**Primary workflow:**
-1. **📝 Enter patient query** in the Patient Prompt field
-2. **▶️ Click 'Start Evaluation'** to begin the analysis process
-3. **👀 Monitor progress** through the notification area and live output
+**Advanced Options:** 
+- **⏸️ 'Continue Evaluation'** to resume
+- **⚙️ 'Manage Agent'** for interrupt configuration
+- **🔄 Thread management** for session switching
 
-**Advanced options:**
-- **⏸️ 'Continue Evaluation'** - Resume if the agent was interrupted
-- **⚙️ 'Manage Agent'** - Configure which states to interrupt after
-- **🔄 Thread management** - Switch between different evaluation sessions
-
-**💡 Tip:** Watch the notification area for guidance on which tab to check next!""",
+**💡 Tip:** Follow notification guidance for next steps!""",
                     visible=True
                 )
                 
@@ -396,9 +398,15 @@ class trials_gui( ):
                     visible=True,
                 )
                 
+                # Add processing indicator
+                processing_status = gr.Markdown(
+                    value="",
+                    visible=False
+                )
+                
                 with gr.Row():
                     last_node = gr.Textbox(label="last node", min_width=150)
-                    eligible_bx = gr.Textbox(label="Eligible Patient", min_width=50)
+                    eligible_bx = gr.Textbox(label="Is Patient Eligible?", min_width=50)
                     nnode_bx = gr.Textbox(label="next node", min_width=150)
                     threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80, visible=False)
                     search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110, visible=False)
@@ -410,16 +418,34 @@ class trials_gui( ):
                         gr.update(visible=debug_enabled),  # threadid_bx
                         gr.update(visible=debug_enabled),  # search_bx
                         gr.update(visible=debug_enabled),  # count_bx
+                        gr.update(visible=debug_enabled),  # thread_pd
+                        gr.update(visible=debug_enabled),  # step_pd
                     ]
                 
-                with gr.Accordion("Manage Agent", open=False):
+                # Function to show processing status
+                def show_processing():
+                    return gr.update(
+                        value="🔄 **Agent is processing...** Please wait while the evaluation is in progress.",
+                        visible=True
+                    )
+                
+                # Function to hide processing status
+                def hide_processing():
+                    return gr.update(visible=False)
+                
+                with gr.Accordion("Manage Agent", open=True):
                     checks = list(self.graph.nodes.keys())
                     checks.remove('__start__')
                     stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks, scale=0, min_width=400)
                     with gr.Row():
-                        thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0)
-                        step_pd = gr.Dropdown(choices=['N/A'],interactive=True, label="select step", min_width=160, scale=1)
-                live = gr.Textbox(label="Live Agent Output", lines=50, max_lines=50)
+                        thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0, visible=False)
+                        step_pd = gr.Dropdown(choices=['N/A'],interactive=True, label="select step", min_width=160, scale=1, visible=False)
+                
+                # Add progress bar
+                # progress_bar =  gr.Progress()
+                
+                with gr.Accordion("Live Agent Output", open=False):
+                    live = gr.Textbox(label="", lines=10, max_lines=25)
         
                 # actions
                 sdisps =[prompt_bx,tab_notification,last_node,eligible_bx, nnode_bx,threadid_bx,count_bx,step_pd,thread_pd, search_bx]
@@ -428,7 +454,7 @@ class trials_gui( ):
                 debug_mode.change(
                     fn=toggle_debug_fields,
                     inputs=[debug_mode],
-                    outputs=[threadid_bx, search_bx, count_bx]
+                    outputs=[threadid_bx, search_bx, count_bx, thread_pd, step_pd]
                 )
                 
                 # sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,revision_bx,count_bx,step_pd,thread_pd]
@@ -438,10 +464,14 @@ class trials_gui( ):
                               fn=updt_disp, inputs=None, outputs=sdisps)
                 gen_btn.click(vary_btn,gr.Number("secondary", visible=False), gen_btn).then(
                               vary_btn,gr.Number("primary", visible=False), cont_btn).then(
+                              fn=show_processing, inputs=None, outputs=processing_status).then(
                               fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live],show_progress=True).then(
+                              fn=hide_processing, inputs=None, outputs=processing_status).then(
                               fn=updt_disp, inputs=None, outputs=sdisps)
-                cont_btn.click(fn=self.run_agent, inputs=[gr.Number(False, visible=False),prompt_bx,stop_after], 
+                cont_btn.click(fn=show_processing, inputs=None, outputs=processing_status).then(
+                               fn=self.run_agent, inputs=[gr.Number(False, visible=False),prompt_bx,stop_after], 
                                outputs=[live]).then(
+                               fn=hide_processing, inputs=None, outputs=processing_status).then(
                                fn=updt_disp, inputs=None, outputs=sdisps)            
         
             with gr.Tab("Profile"):
@@ -586,31 +616,31 @@ class trials_gui( ):
                 refresh_btn.click(fn=self.get_table,  inputs=gr.Number("trials_scores", visible=False), outputs=trials_scores_bx)
             
             
-            with gr.Tab("StateSnapShots"):
-                # Add informative text at the top of the StateSnapShots tab
-                snapshots_info = gr.Markdown(
-                    value="""## 🔍 Agent State History
+            # with gr.Tab("StateSnapShots"):
+            #     # Add informative text at the top of the StateSnapShots tab
+            #     snapshots_info = gr.Markdown(
+            #         value="""## 🔍 Agent State History
 
-**🛠️ For debugging and advanced users** - View the complete agent execution history.
+            # **🛠️ For debugging and advanced users** - View the complete agent execution history.
 
-**What you'll find:**
-- **📜 Step-by-step agent decisions** and state changes
-- **🔧 Technical details** of the evaluation process
-- **🕒 Historical snapshots** of each processing stage
+            # **What you'll find:**
+            # - **📜 Step-by-step agent decisions** and state changes
+            # - **🔧 Technical details** of the evaluation process
+            # - **🕒 Historical snapshots** of each processing stage
 
-**When to use:**
-- **🐛 Troubleshooting** unexpected results
-- **🔍 Understanding** how the agent reached its conclusions
-- **⚙️ Advanced configuration** and debugging
+            # **When to use:**
+            # - **🐛 Troubleshooting** unexpected results
+            # - **🔍 Understanding** how the agent reached its conclusions
+            # - **⚙️ Advanced configuration** and debugging
 
-**💡 Most users won't need this tab** - it's primarily for technical analysis.""",
-                    visible=True
-                )
+            # **💡 Most users won't need this tab** - it's primarily for technical analysis.""",
+            #         visible=True
+            #     )
                 
-                with gr.Row():
-                    refresh_btn = gr.Button("Refresh")
-                snapshots = gr.Textbox(label="State Snapshots Summaries")
-                refresh_btn.click(fn=get_snapshots, inputs=None, outputs=snapshots)
+            #     with gr.Row():
+            #         refresh_btn = gr.Button("Refresh")
+            #     snapshots = gr.Textbox(label="State Snapshots Summaries")
+            #     refresh_btn.click(fn=get_snapshots, inputs=None, outputs=snapshots)
         return demo
 
     def launch(self, share=None):
