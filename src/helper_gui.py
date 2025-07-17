@@ -385,6 +385,8 @@ class trials_gui( ):
                     prompt_bx = gr.Textbox(label="Patient Prompt", value="Is patient_ID 56 eligible for any medical trial?")
                     gen_btn = gr.Button("Start Evaluation", scale=0,min_width=80, variant='primary')
                     cont_btn = gr.Button("Continue Evaluation", scale=0,min_width=80)
+                    # Add debug mode switch
+                    debug_mode = gr.Checkbox(label="🔧 Debug Mode", value=False, scale=0, min_width=120)
                 
                 # Add notification box below patient prompt
                 tab_notification = gr.Textbox(
@@ -398,9 +400,18 @@ class trials_gui( ):
                     last_node = gr.Textbox(label="last node", min_width=150)
                     eligible_bx = gr.Textbox(label="Eligible Patient", min_width=50)
                     nnode_bx = gr.Textbox(label="next node", min_width=150)
-                    threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80)
-                    search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110)
-                    count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110)
+                    threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80, visible=False)
+                    search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110, visible=False)
+                    count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110, visible=False)
+                
+                # Function to toggle debug fields visibility
+                def toggle_debug_fields(debug_enabled):
+                    return [
+                        gr.update(visible=debug_enabled),  # threadid_bx
+                        gr.update(visible=debug_enabled),  # search_bx
+                        gr.update(visible=debug_enabled),  # count_bx
+                    ]
+                
                 with gr.Accordion("Manage Agent", open=False):
                     checks = list(self.graph.nodes.keys())
                     checks.remove('__start__')
@@ -412,6 +423,14 @@ class trials_gui( ):
         
                 # actions
                 sdisps =[prompt_bx,tab_notification,last_node,eligible_bx, nnode_bx,threadid_bx,count_bx,step_pd,thread_pd, search_bx]
+                
+                # Add debug mode toggle functionality
+                debug_mode.change(
+                    fn=toggle_debug_fields,
+                    inputs=[debug_mode],
+                    outputs=[threadid_bx, search_bx, count_bx]
+                )
+                
                 # sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,revision_bx,count_bx,step_pd,thread_pd]
                 thread_pd.input(self.switch_thread, [thread_pd], None).then(
                                 fn=updt_disp, inputs=None, outputs=sdisps)
