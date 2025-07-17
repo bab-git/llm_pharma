@@ -266,7 +266,7 @@ class trials_gui( ):
                 for state in self.graph.get_state_history(self.thread):
                     if state.metadata['step'] < 1:  #ignore early states
                         continue
-                    s_thread_ts = state.config['configurable']['thread_ts']
+                    s_thread_ts = state.config['configurable'].get('thread_ts', 'unknown')
                     s_tid = state.config['configurable']['thread_id']
                     s_count = state.values['revision_number']
                     s_last_node = state.values['last_node']
@@ -276,7 +276,18 @@ class trials_gui( ):
                     # print(st)
                     hist.append(st)
                 if not current_state.metadata: #handle init call
-                    return{}
+                    return {
+                        prompt_bx: "",
+                        last_node: "",
+                        count_bx: "",
+                        search_bx: "",
+                        nnode_bx: "",
+                        eligible_bx: "",
+                        threadid_bx: self.thread_id,
+                        thread_pd: gr.Dropdown(label="choose thread", choices=self.threads, value=self.thread_id, interactive=True),
+                        step_pd: gr.Dropdown(label="update_state from: thread:revision_number:last_node:next_node:rev:thread_ts", 
+                               choices=["N/A"], value="N/A", interactive=True),
+                    }
                 else:
                     return {
                         prompt_bx : current_state.values["patient_prompt"],
@@ -339,15 +350,16 @@ class trials_gui( ):
                 step_pd.input(self.copy_state,[step_pd],None).then(
                               fn=updt_disp, inputs=None, outputs=sdisps)
                 gen_btn.click(vary_btn,gr.Number("secondary", visible=False), gen_btn).then(
+                              vary_btn,gr.Number("primary", visible=False), cont_btn).then(
                               fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live],show_progress=True).then(
-                              fn=updt_disp, inputs=None, outputs=sdisps).then( 
-                              vary_btn,gr.Number("primary", visible=False), gen_btn).then(
-                              vary_btn,gr.Number("primary", visible=False), cont_btn)
-                cont_btn.click(vary_btn,gr.Number("secondary", visible=False), cont_btn).then(
-                               fn=self.run_agent, inputs=[gr.Number(False, visible=False),prompt_bx,stop_after], 
+                              fn=updt_disp, inputs=None, outputs=sdisps)
+                cont_btn.click(fn=self.run_agent, inputs=[gr.Number(False, visible=False),prompt_bx,stop_after], 
                                outputs=[live]).then(
-                               fn=updt_disp, inputs=None, outputs=sdisps).then(
-                               vary_btn,gr.Number("primary", visible=False), cont_btn)
+                               fn=updt_disp, inputs=None, outputs=sdisps)
+        
+            with gr.Tab("Profile"):
+                with gr.Row():
+                    refresh_btn = gr.Button("Refresh")
         
             with gr.Tab("Profile"):
                 with gr.Row():
@@ -379,14 +391,14 @@ class trials_gui( ):
                     refresh_btn = gr.Button("Refresh")
                     # modify_btn = gr.Button("Modify")
                 # trials_bx = gr.Textbox(label="Retieved relevant trials based on patient's profile", lines=10, interactive=False)
-                trials_bx = gr.Dataframe(label="Retieved relevant trials based on patient's profile", wrap=True, interactive=True, height=1000)
+                trials_bx = gr.Dataframe(label="Retieved relevant trials based on patient's profile", wrap=True, interactive=True, max_height=1000)
                 refresh_btn.click(fn=self.get_table, inputs=gr.Number("trials", visible=False), outputs=trials_bx)                
             
             with gr.Tab("Trials Scores"):
                 with gr.Row():
                     refresh_btn = gr.Button("Refresh")
                 # trials_scores_bx = gr.Textbox(label="Trials Scores based on patient's profile")
-                trials_scores_bx = gr.Dataframe(label="Trials Scores based on patient's profile", wrap=True, interactive=False, height=1000)
+                trials_scores_bx = gr.Dataframe(label="Trials Scores based on patient's profile", wrap=True, interactive=False, max_height=1000)
                 refresh_btn.click(fn=self.get_table,  inputs=gr.Number("trials_scores", visible=False), outputs=trials_scores_bx)
             
             
