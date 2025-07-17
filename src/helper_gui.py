@@ -351,6 +351,16 @@ class trials_gui( ):
                 return(gr.update(variant=stat))
             
             with gr.Tab("Agent"):
+                # Add app description at the very top
+                app_description = gr.Markdown(
+                    value="""## 🏥 Clinical Trial Eligibility Assistant
+
+**Purpose:** This AI-powered application helps healthcare professionals evaluate patient eligibility for clinical trials by analyzing patient data, reviewing trial policies, and matching patients with appropriate studies.
+
+**How it works:** The system uses a multi-stage evaluation process to assess patient compatibility with available clinical trials, ensuring both patient safety and trial requirements are met.""",
+                    visible=True
+                )
+                
                 # Add informative text at the top of the Agent tab
                 agent_info = gr.Markdown(
                     value="""## 🤖 Agent Control Center
