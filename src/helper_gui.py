@@ -1,6 +1,5 @@
 import gradio as gr
 import pandas as pd
-import os
 
 class trials_gui( ):
     SENTINEL_NONE = "__NONE__"
@@ -17,29 +16,28 @@ class trials_gui( ):
         #self.sdisps = {} #global    
         self.demo = self.create_interface()
 
-    def get_active_tab_index(self):
-        """Determine which tab should be highlighted based on current agent state"""
-        current_state = self.graph.get_state(self.thread)
+    def get_tab_notification(self, last_node, policy_eligible=None):
+        """Determine which tab to notify user about based on current state"""
+        if not last_node:
+            return "Agent is starting..."
         
-        if not current_state.metadata:
-            return 0  # Default to Agent tab
+        # Map nodes to appropriate tab notifications
+        node_to_tab = {
+            'patient_collector': 'Profile - Patient profile has been created',
+            'policy_search': 'Policies - Relevant policies have been retrieved', 
+            'policy_evaluator': 'Policy Issue - Policy evaluation completed',
+            'trial_search': 'Matched Trials - Clinical trials have been found',
+            'grade_trials': 'Trials Scores - Trial relevance scores are ready',
+            'profile_rewriter': 'Profile - Patient profile has been updated'
+        }
+        
+        # Special case for policy issues
+        if last_node == 'policy_evaluator' and policy_eligible == False:
+            return 'Policy Issue - ATTENTION: Patient has policy conflicts that need review'
+        elif last_node == 'policy_evaluator' and policy_eligible == True:
+            return 'Agent continuing - Policy check passed, no action needed'
             
-        last_node = current_state.values.get("last_node", "")
-        policy_eligible = current_state.values.get("policy_eligible", None)
-        
-        # Map agent states to appropriate tabs
-        if last_node == "patient_collector":
-            return 1  # Profile tab
-        elif last_node == "policy_search":
-            return 2  # Policies tab
-        elif last_node == "policy_evaluator" and policy_eligible == False:
-            return 3  # Policy Issue tab
-        elif last_node in ["trial_search", "grade_trials"]:
-            return 4  # Matched Trials tab
-        elif "relevant_trials" in current_state.values:
-            return 5  # Trials Scores tab
-        else:
-            return 0  # Default to Agent tab
+        return node_to_tab.get(last_node, f'Agent is at: {last_node}')
 
     def run_agent(self, start,patient_prompt,stop_after):
         #global partial_message, thread_id,thread
@@ -65,8 +63,7 @@ class trials_gui( ):
             self.partial_message += f"\n {40*'========='}\n\n"
             ## fix
             last_node,nnode,_,rev,acount = self.get_disp_state()
-            active_tab = self.get_active_tab_index()  # Get the appropriate tab
-            yield self.partial_message,last_node,nnode,self.thread_id,rev,acount,active_tab
+            yield self.partial_message,last_node,nnode,self.thread_id,rev,acount,
             config = None #need
             #print(f"run_agent:{last_node}")
             if not nnode:  
@@ -301,12 +298,10 @@ class trials_gui( ):
                     st = f"{s_tid}:{s_count}:{s_last_node}:{s_nnode}:{s_rev}:{s_thread_ts}"
                     # print(st)
                     hist.append(st)
-                    
-                active_tab = self.get_active_tab_index()  # Get appropriate tab
-                
                 if not current_state.metadata: #handle init call
                     return {
                         prompt_bx: "",
+                        tab_notification: gr.update(value="Ready to start agent evaluation", visible=True),
                         last_node: "",
                         count_bx: "",
                         search_bx: "",
@@ -316,11 +311,15 @@ class trials_gui( ):
                         thread_pd: gr.Dropdown(label="choose thread", choices=self.threads, value=self.thread_id, interactive=True),
                         step_pd: gr.Dropdown(label="update_state from: thread:revision_number:last_node:next_node:rev:thread_ts", 
                                choices=["N/A"], value="N/A", interactive=True),
-                        tabs: gr.Tabs(selected=0),  # Default to Agent tab
                     }
                 else:
+                    # Get tab notification based on current state
+                    policy_eligible = current_state.values.get("policy_eligible")
+                    notification = self.get_tab_notification(current_state.values["last_node"], policy_eligible)
+                    
                     return {
                         prompt_bx : current_state.values["patient_prompt"],
+                        tab_notification: gr.update(value=notification, visible=True),
                         last_node : current_state.values["last_node"],
                         count_bx : current_state.values["revision_number"],
                         search_bx : current_state.values["trial_searches"],
@@ -331,7 +330,6 @@ class trials_gui( ):
                         thread_pd : gr.Dropdown(label="choose thread", choices=self.threads, value=self.thread_id,interactive=True),
                         step_pd : gr.Dropdown(label="update_state from: thread:revision_number:last_node:next_node:rev:thread_ts", 
                                choices=hist, value=hist[0],interactive=True),
-                        tabs : gr.Tabs(selected=active_tab),  # Set the active tab
                     }
             def get_snapshots():
                 new_label = f"thread_id: {self.thread_id}, Summary of snapshots"
@@ -352,97 +350,109 @@ class trials_gui( ):
                 #print(f"vary_btn{stat}")
                 return(gr.update(variant=stat))
             
-            # Wrap all tabs in a gr.Tabs component with selected parameter
-            with gr.Tabs() as tabs:
-                with gr.Tab("Agent"):
+            with gr.Tab("Agent"):
+                with gr.Row():
+                    prompt_bx = gr.Textbox(label="Patient Prompt", value="Is patient_ID 56 eligible for any medical trial?")
+                    gen_btn = gr.Button("Start Evaluation", scale=0,min_width=80, variant='primary')
+                    cont_btn = gr.Button("Continue Evaluation", scale=0,min_width=80)
+                
+                # Add notification box below patient prompt
+                tab_notification = gr.Textbox(
+                    value="Ready to start agent evaluation",
+                    label="🔔 Check this tab",
+                    interactive=False,
+                    visible=True,
+                )
+                
+                with gr.Row():
+                    last_node = gr.Textbox(label="last node", min_width=150)
+                    eligible_bx = gr.Textbox(label="Eligible Patient", min_width=50)
+                    nnode_bx = gr.Textbox(label="next node", min_width=150)
+                    threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80)
+                    search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110)
+                    count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110)
+                with gr.Accordion("Manage Agent", open=False):
+                    checks = list(self.graph.nodes.keys())
+                    checks.remove('__start__')
+                    stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks, scale=0, min_width=400)
                     with gr.Row():
-                        prompt_bx = gr.Textbox(label="Patient Prompt", value="Is patient_ID 56 eligible for any medical trial?")
-                        gen_btn = gr.Button("Start Evaluation", scale=0,min_width=80, variant='primary')
-                        cont_btn = gr.Button("Continue Evaluation", scale=0,min_width=80)
-                    with gr.Row():
-                        last_node = gr.Textbox(label="last node", min_width=150)
-                        eligible_bx = gr.Textbox(label="Eligible Patient", min_width=50)
-                        nnode_bx = gr.Textbox(label="next node", min_width=150)
-                        threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80)
-                        search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110)
-                        count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110)
-                    with gr.Accordion("Manage Agent", open=False):
-                        checks = list(self.graph.nodes.keys())
-                        checks.remove('__start__')
-                        stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks, scale=0, min_width=400)
-                        with gr.Row():
-                            thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0)
-                            step_pd = gr.Dropdown(choices=['N/A'],interactive=True, label="select step", min_width=160, scale=1)
-                    live = gr.Textbox(label="Live Agent Output", lines=50, max_lines=50)
+                        thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0)
+                        step_pd = gr.Dropdown(choices=['N/A'],interactive=True, label="select step", min_width=160, scale=1)
+                live = gr.Textbox(label="Live Agent Output", lines=50, max_lines=50)
         
-                    # actions
-                    sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,count_bx,step_pd,thread_pd, search_bx, tabs]
-                    thread_pd.input(self.switch_thread, [thread_pd], None).then(
-                                    fn=updt_disp, inputs=None, outputs=sdisps)
-                    step_pd.input(self.copy_state,[step_pd],None).then(
-                                  fn=updt_disp, inputs=None, outputs=sdisps)
-                    gen_btn.click(vary_btn,gr.Number("secondary", visible=False), gen_btn).then(
-                                  vary_btn,gr.Number("primary", visible=False), cont_btn).then(
-                                  fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live,last_node,nnode_bx,threadid_bx,count_bx,search_bx,tabs],show_progress=True).then(
-                                  fn=updt_disp, inputs=None, outputs=sdisps)
-                    cont_btn.click(fn=self.run_agent, inputs=[gr.Number(False, visible=False),prompt_bx,stop_after], 
-                                   outputs=[live,last_node,nnode_bx,threadid_bx,count_bx,search_bx,tabs]).then(
-                                   fn=updt_disp, inputs=None, outputs=sdisps)
+                # actions
+                sdisps =[prompt_bx,tab_notification,last_node,eligible_bx, nnode_bx,threadid_bx,count_bx,step_pd,thread_pd, search_bx]
+                # sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,revision_bx,count_bx,step_pd,thread_pd]
+                thread_pd.input(self.switch_thread, [thread_pd], None).then(
+                                fn=updt_disp, inputs=None, outputs=sdisps)
+                step_pd.input(self.copy_state,[step_pd],None).then(
+                              fn=updt_disp, inputs=None, outputs=sdisps)
+                gen_btn.click(vary_btn,gr.Number("secondary", visible=False), gen_btn).then(
+                              vary_btn,gr.Number("primary", visible=False), cont_btn).then(
+                              fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live],show_progress=True).then(
+                              fn=updt_disp, inputs=None, outputs=sdisps)
+                cont_btn.click(fn=self.run_agent, inputs=[gr.Number(False, visible=False),prompt_bx,stop_after], 
+                               outputs=[live]).then(
+                               fn=updt_disp, inputs=None, outputs=sdisps)            
         
-                with gr.Tab("Profile"):
-                    with gr.Row():
-                        refresh_btn = gr.Button("Refresh")
-                        modify_btn = gr.Button("Modify")
-
-                    profile = gr.Textbox(label="Patient's profile created from patient's data", lines=10, interactive=True)
-                    refresh_btn.click(fn=self.get_state, inputs=gr.Number("patient_profile", visible=False), outputs=profile)
-                    modify_btn.click(fn=self.modify_state, inputs=[gr.Number("patient_profile", visible=False),
-                                                              gr.Number(self.SENTINEL_NONE, visible=False), profile],outputs=None).then(
-                                     fn=updt_disp, inputs=None, outputs=sdisps)                                              
-
-                with gr.Tab("Policies"):
+            with gr.Tab("Profile"):
+                with gr.Row():
                     refresh_btn = gr.Button("Refresh")
-                    policies_bx = gr.Textbox(label="Retieved policies based on patient's profile", lines=40)
-                    refresh_btn.click(fn=self.get_content, inputs=gr.Number("policies", visible=False), outputs=policies_bx)
+                    modify_btn = gr.Button("Modify")
 
-                with gr.Tab("Policy Issue"):
-                    with gr.Row():
-                        refresh_btn = gr.Button("Refresh")
-                        skip_btn = gr.Button("Skip the policy")
-                    policy_issue_bx = gr.Textbox(label="Policy Issue", lines=10, interactive=False)
-                    
-                    def skip_policy_and_notify():
-                        """Skip the current policy and show confirmation message"""
-                        # Skip the policy in the state
-                        self.modify_state("policy_skip", self.SENTINEL_NONE, "")
-                        # Return confirmation message
-                        return gr.update(
-                            label="Policy Skipped", 
-                            value="The current policy is skipped for this patient. Please continue evaluation in the Agent tab."
-                        )
-                    
-                    refresh_btn.click(fn=self.get_issue_policy, inputs=None, outputs=policy_issue_bx)
-                    skip_btn.click(fn=skip_policy_and_notify, inputs=None, outputs=policy_issue_bx).then(
-                                    fn=updt_disp, inputs=None, outputs=sdisps)
+                profile = gr.Textbox(label="Patient's profile created from patient's data", lines=10, interactive=True)
+                refresh_btn.click(fn=self.get_state, inputs=gr.Number("patient_profile", visible=False), outputs=profile)
+                modify_btn.click(fn=self.modify_state, inputs=[gr.Number("patient_profile", visible=False),
+                                                          gr.Number(self.SENTINEL_NONE, visible=False), profile],outputs=None).then(
+                                 fn=updt_disp, inputs=None, outputs=sdisps)                                              
 
-                with gr.Tab("Matched Trials"):
-                    with gr.Row():
-                        refresh_btn = gr.Button("Refresh")
-                    trials_bx = gr.Dataframe(label="Retieved relevant trials based on patient's profile", wrap=True, interactive=True, max_height=1000)
-                    refresh_btn.click(fn=self.get_table, inputs=gr.Number("trials", visible=False), outputs=trials_bx)                
+            with gr.Tab("Policies"):
+                refresh_btn = gr.Button("Refresh")
+                policies_bx = gr.Textbox(label="Retieved policies based on patient's profile", lines=40)
+                refresh_btn.click(fn=self.get_content, inputs=gr.Number("policies", visible=False), outputs=policies_bx)
+
+            with gr.Tab("Policy Issue"):
+                with gr.Row():
+                    refresh_btn = gr.Button("Refresh")
+                    skip_btn = gr.Button("Skip the policy")
+                policy_issue_bx = gr.Textbox(label="Policy Issue", lines=10, interactive=False)
                 
-                with gr.Tab("Trials Scores"):
-                    with gr.Row():
-                        refresh_btn = gr.Button("Refresh")
-                    trials_scores_bx = gr.Dataframe(label="Trials Scores based on patient's profile", wrap=True, interactive=False, max_height=1000)
-                    refresh_btn.click(fn=self.get_table,  inputs=gr.Number("trials_scores", visible=False), outputs=trials_scores_bx)
+                def skip_policy_and_notify():
+                    """Skip the current policy and show confirmation message"""
+                    # Skip the policy in the state
+                    self.modify_state("policy_skip", self.SENTINEL_NONE, "")
+                    # Return confirmation message
+                    return gr.update(
+                        label="Policy Skipped", 
+                        value="The current policy is skipped for this patient. Please continue evaluation in the Agent tab."
+                    )
                 
-                with gr.Tab("StateSnapShots"):
-                    with gr.Row():
-                        refresh_btn = gr.Button("Refresh")
-                    snapshots = gr.Textbox(label="State Snapshots Summaries")
-                    refresh_btn.click(fn=get_snapshots, inputs=None, outputs=snapshots)
-                    
+                refresh_btn.click(fn=self.get_issue_policy, inputs=None, outputs=policy_issue_bx)
+                skip_btn.click(fn=skip_policy_and_notify, inputs=None, outputs=policy_issue_bx).then(
+                                fn=updt_disp, inputs=None, outputs=sdisps)
+                
+
+            with gr.Tab("Matched Trials"):
+                with gr.Row():
+                    refresh_btn = gr.Button("Refresh")
+                    # modify_btn = gr.Button("Modify")
+                # trials_bx = gr.Textbox(label="Retieved relevant trials based on patient's profile", lines=10, interactive=False)
+                trials_bx = gr.Dataframe(label="Retieved relevant trials based on patient's profile", wrap=True, interactive=True, max_height=1000)
+                refresh_btn.click(fn=self.get_table, inputs=gr.Number("trials", visible=False), outputs=trials_bx)                
+            
+            with gr.Tab("Trials Scores"):
+                with gr.Row():
+                    refresh_btn = gr.Button("Refresh")
+                # trials_scores_bx = gr.Textbox(label="Trials Scores based on patient's profile")
+                trials_scores_bx = gr.Dataframe(label="Trials Scores based on patient's profile", wrap=True, interactive=False, max_height=1000)
+                refresh_btn.click(fn=self.get_table,  inputs=gr.Number("trials_scores", visible=False), outputs=trials_scores_bx)
+            
+            
+            with gr.Tab("StateSnapShots"):
+                with gr.Row():
+                    refresh_btn = gr.Button("Refresh")
+                snapshots = gr.Textbox(label="State Snapshots Summaries")
+                refresh_btn.click(fn=get_snapshots, inputs=None, outputs=snapshots)
         return demo
 
     def launch(self, share=None):
