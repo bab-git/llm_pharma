@@ -87,23 +87,63 @@ def ensure_patient_database_exists():
         print(f"❌ Error creating patient database: {e}")
         print(" Continuing without patient database...")
 
-# def create_demo_graph():
-#     """
-#     Create a demo graph for testing the dashboard GUI.
-#     This imports from the separate demo module.
-#     """
-#     try:
-#         from .demo_graph import create_demo_graph
-#         return create_demo_graph()
-#     except ImportError:
-#         # Fallback if relative import fails
-#         try:
-#             from demo_graph import create_demo_graph
-#             return create_demo_graph()
-#         except ImportError as e:
-#             print(f"❌ Demo module not found: {e}")
-#             print(" Please ensure demo_graph.py is in the frontend directory")
-#             return None
+def ensure_trial_database_exists():
+    """
+    Ensure the trial database exists by creating it if it doesn't.
+    This function calls dataset_create_trials from helper functions.
+    """
+    try:
+        from backend.helper_functions import dataset_create_trials
+        
+        print("📊 Checking trial database...")
+        
+        # Check if trial database already exists
+        trials_path = "data/trials_data.csv"
+        if not os.path.isabs(trials_path):
+            project_root = Path(__file__).parent.parent
+            trials_path = project_root / trials_path
+        
+        if trials_path.exists():
+            print("✅ Trial database already exists")
+        else:
+            print("🔄 Creating trial database...")
+            df_trials, csv_path = dataset_create_trials(status='recruiting')
+            print(f"✅ Trial database created successfully at {csv_path}")
+            print(f"📈 Created {len(df_trials)} trials")
+            
+    except ImportError as e:
+        print(f"❌ Could not import dataset_create_trials: {e}")
+        print("💡 Please ensure backend.helper_functions is available")
+    except Exception as e:
+        print(f"❌ Error creating trial database: {e}")
+        print(" Continuing without trial database...")
+
+def ensure_vector_stores_exist():
+    """
+    Ensure the vector stores exist by creating them if they don't.
+    This function creates both policy and trial vector stores.
+    """
+    try:
+        from backend.helper_functions import create_policy_vectorstore, create_trial_vectorstore
+        
+        print("🔍 Checking vector stores...")
+        
+        # Create policy vector store
+        print("📋 Creating policy vector store...")
+        policy_vectorstore = create_policy_vectorstore()
+        
+        # Create trial vector store
+        print("🧪 Creating trial vector store...")
+        trial_vectorstore = create_trial_vectorstore()
+        
+        print("✅ Vector stores ready")
+        
+    except ImportError as e:
+        print(f"❌ Could not import vector store functions: {e}")
+        print("💡 Please ensure backend.helper_functions is available")
+    except Exception as e:
+        print(f"❌ Error creating vector stores: {e}")
+        print(" Continuing without vector stores...")
 
 def launch_dashboard(host="127.0.0.1", port=7958, share=False, demo_mode=False):
     """
@@ -111,8 +151,10 @@ def launch_dashboard(host="127.0.0.1", port=7958, share=False, demo_mode=False):
     """
     print("🚀 Initializing LLM Pharma Dashboard...")
     
-    # Ensure patient database exists before creating the workflow
+    # Ensure all databases and vector stores exist before creating the workflow
     ensure_patient_database_exists()
+    ensure_trial_database_exists()
+    ensure_vector_stores_exist()
     
     try:
         # Import the GUI class

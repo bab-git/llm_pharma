@@ -1,7 +1,7 @@
 """
 LLM Pharma Helper Functions
 
-This module contains the complete implementation of the patient collector node
+This module contains the complete implementation of the patient collector and policy evaluator nodes
 and supporting functions for the LLM Pharma clinical trial workflow system.
 
 COMPLETED FEATURES:
@@ -13,15 +13,26 @@ COMPLETED FEATURES:
    - Generates patient profile for clinical trial screening
    - Uses Groq model for free LLM inference
 
-2. Demo Patient Database - COMPLETED
-   - Pre-populated SQLite database with 5 sample patients
+2. Policy Evaluator Node - COMPLETED
+   - Evaluates patient eligibility against institutional policies
+   - Converts policy documents into yes/no questions
+   - Uses structured tools for date and number comparisons
+   - Provides detailed rejection reasons for ineligible patients
+
+3. Demo Patient Database - COMPLETED
+   - Pre-populated SQLite database with 100 sample patients
    - Includes medical history, trial participation, demographics
    - Automatic database creation and management
 
-3. Configuration System - COMPLETED
+4. Configuration System - COMPLETED
    - PatientCollectorConfig class for model and database setup
    - Support for both OpenAI and Groq models
    - Flexible database path configuration
+
+5. Policy Tools - COMPLETED
+   - Date comparison and calculation tools
+   - Number comparison tools
+   - Structured evaluation with ReAct agent
 
 USAGE EXAMPLE:
 ==============
@@ -29,6 +40,7 @@ USAGE EXAMPLE:
     from helper_functions import (
         initialize_patient_collector_system,
         patient_collector_node,
+        policy_evaluator_node,
         create_agent_state
     )
     
@@ -42,8 +54,14 @@ USAGE EXAMPLE:
     # Run patient collector
     result = patient_collector_node(state)
     
+    # Run policy evaluator
+    state.update(result)
+    state['unchecked_policies'] = [policy_document]  # Add policy documents
+    policy_result = policy_evaluator_node(state)
+    
     print(f"Patient ID: {result['patient_id']}")
     print(f"Profile: {result['patient_profile']}")
+    print(f"Policy Eligible: {policy_result['policy_eligible']}")
 
 TESTING:
 ========
@@ -65,8 +83,6 @@ TODO - PLACEHOLDER NODES:
 =========================
 
 The following nodes still need implementation:
-- policy_search_node
-- policy_evaluator_node  
 - trial_search_node
 - grade_trials_node
 - profile_rewriter_node
@@ -89,6 +105,11 @@ from operator import itemgetter
 from typing import Literal
 from langgraph.graph import StateGraph, END
 import sqlite3
+from langchain_core.tools import StructuredTool
+from datetime import date, datetime
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langgraph.prebuilt import create_react_agent
+from langchain_core.tools import tool
 
 import os
 from openai import OpenAI
@@ -102,9 +123,36 @@ import ast
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv()) # read local .env file
 
+from langchain_community.vectorstores import Chroma
+from langchain_nomic import NomicEmbeddings
+import chromadb
+import json
+
 class Patient_ID(BaseModel):
     """Model for extracting patient ID from user prompt."""
     patient_id: int
+
+class policy_relevance(BaseModel):
+    """Policy relevance score"""
+    relevant: str = Field(description="is policy relevant? 'yes' or 'no'.")
+    reason: str
+
+class eligibility(BaseModel):
+    """Give the patient's eligibility result."""
+    eligibility: str = Field(description="Patient's eligibility for the clinical trial. 'yes' or 'no'")
+    reason: str = Field(description="The reason(s) only if the patient is not eligible for clinical trials. Otherwise use N/A")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "eligibility": 'yes',
+                "reason": "N/A",
+            },
+            "example 2": {
+                "eligibility": 'no',
+                "reason": "The patient is pregnant at the moment.",
+            },                
+        }
 
 class PatientCollectorConfig:
     """Configuration for patient collector node."""
@@ -409,6 +457,109 @@ def create_agent_state() -> AgentState:
         "ask_expert": ""
     }
 
+def policy_tools(policy_qs: str, patient_profile: str, model_agent):
+    """
+    Policy evaluation tools for clinical trial eligibility assessment.
+    
+    Args:
+        policy_qs: Policy questions to evaluate
+        patient_profile: Patient profile document
+        model_agent: LLM model for evaluation
+        
+    Returns:
+        str: Evaluation result
+    """
+    class CalculatorInput(BaseModel):
+        num1: float = Field(description="first number")
+        num2: float = Field(description="second number")
+
+    def multiply(num1: float, num2: float) -> float:
+        "multiplies two input numbers together, num1 and num2"
+        return (num1 * num2)
+
+    multiply_tool = StructuredTool.from_function(
+        func=multiply,
+        name="multiply",
+        description="multiply numbers",
+        args_schema=CalculatorInput,
+    )
+
+    @tool("date_today-tool")
+    def date_today() -> datetime.date:
+        "returns today date"
+        return datetime.today().date()    
+
+    def date_difference(date1: date, date2: date) -> int:
+        "The number of months date1 is before date2"
+        month_difference = (date2.year - date1.year) * 12 + date2.month - date1.month
+        return f'{month_difference} months'
+
+    class dates(BaseModel):
+        date1: date = Field(description="first date")
+        date2: date = Field(description="second date")
+
+    date_difference_tool = StructuredTool.from_function(
+        func=date_difference,
+        name="date_difference",
+        description="The number of months first date is before second date",
+        args_schema=dates,
+    )
+
+    class date_class(BaseModel):
+        date: str = Field(description="A date string in the format YYYY-MM-DD")    
+
+    @tool("date_convert-tool", args_schema=date_class)
+    def date_convert(date: str) -> date:
+        "Converts a date string to a date object"
+        date = datetime.strptime(date, "%Y-%m-%d").date()
+        return date
+
+    @tool("date_split-tool", args_schema=date_class)
+    def date_split(date: str) -> date:
+        "Extracts the year and month from a date string"
+        date = datetime.strptime(date, "%Y-%m-%d").date()
+        year = date.year
+        month = date.month
+        return f'year: {year}, month: {month}'
+
+    @tool("number_comparison-tool", args_schema=CalculatorInput)
+    def number_compare(num1: float, num2: float) -> bool:
+        "Determines if first number is less than the second number"
+        num1_less_num1 = num1 < num2
+        return num1_less_num1
+
+    tools = [multiply_tool, date_today, date_difference_tool, date_split, number_compare]
+
+    tool_names=", ".join([tool.name for tool in tools])
+
+    system_message = f"""
+    You are a Principal Investigator (PI) for evaluating patients for clinical trials.
+    You are asked to compare the patient profile document to the institution policy questions.
+    You must determine if the patient is eligible based on the following documents.
+
+    \n #### Here is the patient profile document: \n {patient_profile}\n\n
+
+    If the answer to any policy question is yes, then the patient is not eligible.\n
+    If the answer to the question is not provided in the patient profile, answer 'no'.\n
+
+    Give a binary 'yes' or 'no' score in the response to indicate whether the patient is eligible according to the given policy ONLY.
+    If the patient is not eligible then also include the reason in your response.
+
+    You have access to the following tools:
+    {tool_names}
+    """
+
+    user_message_content = f""" Here are the policy questions: \n{policy_qs}"""
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": user_message_content}
+    ]
+
+    react_agent = create_react_agent(model_agent, tools, debug=False)    
+    messages = react_agent.invoke({"messages": messages})    
+    result = messages["messages"][-1].content    
+    return result
+
 def create_workflow_builder(agent_state: AgentState) -> StateGraph:
     """
     Create the workflow builder with all nodes and edges for the LLM Pharma system.
@@ -529,27 +680,355 @@ Based on the following request identify and return the patient's ID number.
         "policy_eligible": False  # Initialize this key to prevent KeyError
     }
 
+def create_policy_vectorstore(policy_file_path="source_data/instut_trials_policy.md", 
+                            vectorstore_path="vector_store", 
+                            collection_name="policies"):
+    """
+    Create a vector store from the institutional policy document.
+    
+    Args:
+        policy_file_path: Path to the policy markdown file
+        vectorstore_path: Path to store the vector database
+        collection_name: Name of the collection in the vector store
+        
+    Returns:
+        Chroma: The created vector store
+    """
+    # Convert to absolute paths relative to the project root
+    if not os.path.isabs(policy_file_path):
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        policy_file_path = os.path.join(project_root, policy_file_path)
+    
+    if not os.path.isabs(vectorstore_path):
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        vectorstore_path = os.path.join(project_root, vectorstore_path)
+    
+    # Ensure vector store directory exists
+    os.makedirs(vectorstore_path, exist_ok=True)
+    
+    # Read the policy document
+    with open(policy_file_path, 'r', encoding='utf-8') as file:
+        policy_content = file.read()
+    
+    # Split the policy into sections (by headers)
+    sections = []
+    current_section = ""
+    current_title = ""
+    
+    for line in policy_content.split('\n'):
+        if line.startswith('####'):
+            # Save previous section if exists
+            if current_section.strip():
+                sections.append({
+                    'title': current_title,
+                    'content': current_section.strip()
+                })
+            # Start new section
+            current_title = line.replace('####', '').strip()
+            current_section = ""
+        else:
+            current_section += line + "\n"
+    
+    # Add the last section
+    if current_section.strip():
+        sections.append({
+            'title': current_title,
+            'content': current_section.strip()
+        })
+    
+    # Create documents for vector store
+    policy_docs = []
+    for section in sections:
+        doc = Document(
+            page_content=section['content'],
+            metadata={
+                "title": section['title'],
+                "source": "institutional_policy"
+            }
+        )
+        policy_docs.append(doc)
+    
+    # Create persistent client
+    persistent_client = chromadb.PersistentClient(path=vectorstore_path)
+    
+    # Create or load vector store
+    vectorstore = Chroma(
+        client=persistent_client,
+        collection_name=collection_name,
+        embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
+    )
+    
+    # Check if collection is empty and add documents if needed
+    if vectorstore._collection.count() == 0:
+        vectorstore = Chroma.from_documents(
+            documents=policy_docs,
+            client=persistent_client,
+            collection_name=collection_name,
+            embedding=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
+        )
+        print(f"✅ Policy vector store created with {len(policy_docs)} sections")
+    else:
+        print(f"✅ Policy vector store loaded with {vectorstore._collection.count()} documents")
+    
+    return vectorstore
+
+def create_trial_vectorstore(trials_csv_path="data/trials_data.csv",
+                           vectorstore_path="vector_store",
+                           collection_name="trials",
+                           status_filter="recruiting"):
+    """
+    Create a vector store from the clinical trials dataset.
+    
+    Args:
+        trials_csv_path: Path to the trials CSV file
+        vectorstore_path: Path to store the vector database
+        collection_name: Name of the collection in the vector store
+        status_filter: Filter trials by status (e.g., 'recruiting')
+        
+    Returns:
+        Chroma: The created vector store
+    """
+    # Convert to absolute paths relative to the project root
+    if not os.path.isabs(trials_csv_path):
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        trials_csv_path = os.path.join(project_root, trials_csv_path)
+    
+    if not os.path.isabs(vectorstore_path):
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        vectorstore_path = os.path.join(project_root, vectorstore_path)
+    
+    # Ensure vector store directory exists
+    os.makedirs(vectorstore_path, exist_ok=True)
+    
+    # Read trials data
+    df_trials = pd.read_csv(trials_csv_path)
+    
+    # Filter by status if specified
+    if status_filter:
+        df_trials = df_trials[df_trials['status'] == status_filter].reset_index(drop=True)
+        print(f"✅ Filtered trials to status '{status_filter}': {len(df_trials)} trials")
+    
+    # Create documents for vector store
+    trial_docs = []
+    for i, row in df_trials.iterrows():
+        # Map diseases using the disease_map function
+        disease_categories = disease_map(row['diseases'])
+        
+        # Skip if disease category is 'other_conditions'
+        if 'other_conditions' in disease_categories:
+            continue
+            
+        # Create document
+        doc = Document(
+            page_content=row['criteria'],
+            metadata={
+                "nctid": row['nctid'],
+                "status": row['status'],
+                "diseases": str(row['diseases']),
+                "disease_category": disease_categories[0] if disease_categories else 'other_conditions',
+                "drugs": row['drugs'],
+                "phase": row.get('phase', ''),
+                "label": row.get('label', '')
+            }
+        )
+        trial_docs.append(doc)
+    
+    # Remove documents with very long content (>10000 characters)
+    trial_docs = [doc for doc in trial_docs if len(doc.page_content) <= 10000]
+    
+    # Create persistent client
+    persistent_client = chromadb.PersistentClient(path=vectorstore_path)
+    
+    # Create or load vector store
+    vectorstore = Chroma(
+        client=persistent_client,
+        collection_name=collection_name,
+        embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
+    )
+    
+    # Check if collection is empty and add documents if needed
+    if vectorstore._collection.count() == 0:
+        vectorstore = Chroma.from_documents(
+            documents=trial_docs,
+            client=persistent_client,
+            collection_name=collection_name,
+            embedding=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
+        )
+        print(f"✅ Trial vector store created with {len(trial_docs)} trials")
+    else:
+        print(f"✅ Trial vector store loaded with {vectorstore._collection.count()} trials")
+    
+    return vectorstore
+
 def policy_search_node(state: AgentState) -> dict:
-    """Placeholder for policy search node."""
-    # TODO: Implement actual policy search logic
-    return {
-        "last_node": "policy_search",
-        "policies": [],
-        "unchecked_policies": [],
-        "policy_eligible": state.get("policy_eligible", False)  # Preserve existing value
-    }
+    """
+    Policy search node that retrieves relevant institutional policies based on patient profile.
+    
+    Args:
+        state: Current agent state containing patient profile
+        
+    Returns:
+        Updated state with retrieved policies
+    """
+    try:
+        # Get patient profile from state
+        patient_profile = state.get("patient_profile", "")
+        
+        if not patient_profile:
+            print("⚠️ No patient profile available for policy search")
+            return {
+                "last_node": "policy_search",
+                "policies": [],
+                "unchecked_policies": [],
+                "policy_eligible": state.get("policy_eligible", False)
+            }
+        
+        # Create or load policy vector store
+        policy_vectorstore = create_policy_vectorstore()
+        
+        # Create retriever
+        retriever = policy_vectorstore.as_retriever(search_kwargs={"k": 5})
+        
+        # Retrieve relevant policies
+        docs_retrieved = retriever.get_relevant_documents(patient_profile)
+        
+        print(f"✅ Retrieved {len(docs_retrieved)} relevant policy sections")
+        
+        return {
+            "last_node": "policy_search",
+            "policies": docs_retrieved,
+            "unchecked_policies": docs_retrieved.copy(),
+            "policy_eligible": state.get("policy_eligible", False)
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in policy search: {e}")
+        return {
+            "last_node": "policy_search",
+            "policies": [],
+            "unchecked_policies": [],
+            "policy_eligible": state.get("policy_eligible", False)
+        }
 
 def policy_evaluator_node(state: AgentState) -> dict:
-    """Placeholder for policy evaluator node."""
-    # TODO: Implement actual policy evaluation logic
-    return {
-        "last_node": "policy_evaluator",
-        "policy_eligible": True,
-        "rejection_reason": "",
-        "revision_number": state.get("revision_number", 0) + 1,
-        'checked_policy': None,
-        'policy_qs': ""
-    }
+    """
+    Policy evaluator node that evaluates patient eligibility against institutional policies.
+    
+    Args:
+        state: Current agent state containing patient profile and policies
+        
+    Returns:
+        Updated state with policy evaluation results
+    """
+    try:
+        # Check if there are unchecked policies
+        unchecked_policies = state.get("unchecked_policies", [])
+        if not unchecked_policies:
+            print("⚠️ No unchecked policies available for evaluation")
+            return {
+                "last_node": "policy_evaluator",
+                "policy_eligible": state.get("policy_eligible", False),
+                "rejection_reason": state.get("rejection_reason", ""),
+                "revision_number": state.get("revision_number", 0) + 1,
+                'checked_policy': None,
+                'policy_qs': ""
+            }
+        
+        # Get the first unchecked policy
+        policy_doc = unchecked_policies[0]
+        policy_header = policy_doc.page_content.split('\n', 2)[1] if len(policy_doc.page_content.split('\n')) > 1 else "Policy"
+        print(f'Evaluating Policy:\n {policy_header}')
+        
+        policy = policy_doc.page_content
+        patient_profile = state.get("patient_profile", "")
+        
+        if not patient_profile:
+            print("⚠️ No patient profile available for policy evaluation")
+            return {
+                "last_node": "policy_evaluator",
+                "policy_eligible": False,
+                "rejection_reason": "No patient profile available",
+                "revision_number": state.get("revision_number", 0) + 1,
+                'checked_policy': policy_doc,
+                'policy_qs': ""
+            }
+        
+        # Create configuration for this node
+        config = PatientCollectorConfig(use_free_model=True)
+        
+        # Create policy questions prompt
+        prompt_rps = PromptTemplate(
+            template=""" You are a Principal Investigator (PI) for clinical trials. 
+                The following document contains a policy document about participation in clinical trials:
+                \n\n{policy}\n\n
+
+                Your task is to rephrase each single policy from the document above into a single yes/no question. 
+                Form each question so that a yes answer indicates the patient's ineligibility.
+                Do not create more questions than given number of policies.
+
+                Example: Patients who have had accidents in the past 10 months are not eligible
+                rephrased: Did patient have an accident in the past 10 months?
+
+                Example: Patients with active tuberculosis, hepatitis B or C, or HIV are excluded unless the trial is specifically designed for these conditions.
+                rephrased: Did patient have active tuberculosis, hepatitis B or C, or HIV?
+                """,
+            input_variables=["policy"],
+        )
+        
+        # Create policy questions chain
+        policy_rps_chain = prompt_rps | config.model | StrOutputParser()
+        
+        # Generate policy questions
+        policy_qs = policy_rps_chain.invoke({"policy": policy})
+        print(f"✅ Generated policy questions: {policy_qs}")
+        
+        # Evaluate policy using tools
+        result = policy_tools(policy_qs, patient_profile, config.model)
+        print(f"✅ Policy evaluation result: {result}")
+        
+        # Parse the evaluation result using structured output
+        llm_with_tools = config.model.bind_tools([eligibility])
+        message = f"""Evaluation of the patient's eligibility:
+        {result}\n\n
+        Is the patient eligible according to this policy?"""
+        response = llm_with_tools.invoke(message)
+        
+        # Extract eligibility from tool calls
+        if response.tool_calls and len(response.tool_calls) > 0:
+            tool_call = response.tool_calls[0]
+            if 'args' in tool_call:
+                policy_eligible = tool_call['args'].get('eligibility', 'no')
+                rejection_reason = tool_call['args'].get('reason', 'N/A')
+            else:
+                policy_eligible = 'no'
+                rejection_reason = 'Unable to parse evaluation result'
+        else:
+            policy_eligible = 'no'
+            rejection_reason = 'No evaluation result available'
+        
+        # Update state
+        unchecked_policies.pop(0)  # Remove the evaluated policy
+        
+        return {
+            "last_node": "policy_evaluator",
+            "policy_eligible": policy_eligible.lower() == 'yes',
+            "rejection_reason": rejection_reason,
+            "revision_number": state.get("revision_number", 0) + 1,
+            'checked_policy': policy_doc,
+            'policy_qs': policy_qs,
+            'unchecked_policies': unchecked_policies
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in policy evaluation: {e}")
+        return {
+            "last_node": "policy_evaluator",
+            "policy_eligible": False,
+            "rejection_reason": f"Error during evaluation: {str(e)}",
+            "revision_number": state.get("revision_number", 0) + 1,
+            'checked_policy': None,
+            'policy_qs': ""
+        }
 
 def trial_search_node(state: AgentState) -> dict:
     """Placeholder for trial search node."""
@@ -737,7 +1216,13 @@ def disease_map(disease_list):
     # read disease_mapping from a file    
     import json
     
-    with open('../source_data/disease_mapping.json', 'r') as file:
+    # Convert to absolute path relative to the project root
+    disease_mapping_path = 'source_data/disease_mapping.json'
+    if not os.path.isabs(disease_mapping_path):
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        disease_mapping_path = os.path.join(project_root, disease_mapping_path)
+    
+    with open(disease_mapping_path, 'r') as file:
         disease_mapping =  json.load(file)
 
     categories = set()
