@@ -33,8 +33,7 @@ def create_workflow_graph():
         from backend.helper_functions import (
             create_agent_state,
             create_workflow_builder,
-            setup_sqlite_memory,
-            compile_workflow_graph
+            setup_sqlite_memory
         )
         
         # Create the workflow components
@@ -42,10 +41,9 @@ def create_workflow_graph():
         builder = create_workflow_builder(agent_state)
         memory = setup_sqlite_memory()
         
-        # Compile the graph with interrupts
-        graph = compile_workflow_graph(
-            builder=builder,
-            memory=memory,
+        # Compile the graph directly with interrupts
+        graph = builder.compile(
+            checkpointer=memory,
             interrupt_after=['patient_collector', 'policy_search', 'trial_search', 'grade_trials', 'profile_rewriter']
         )
         

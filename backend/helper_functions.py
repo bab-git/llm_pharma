@@ -1,6 +1,19 @@
 from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.prebuilt import ToolNode
+from typing import Annotated, List
+from typing_extensions import TypedDict
+from langgraph.graph.message import AnyMessage, add_messages
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
+from langchain_core.documents import Document
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import tools_condition
+from langchain_core.pydantic_v1 import BaseModel, Field
+from operator import itemgetter
+from typing import Literal
+from langgraph.graph import StateGraph, END
+import sqlite3
 
 import os
 from openai import OpenAI
@@ -8,6 +21,223 @@ from openai import OpenAI
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv()) # read local .env file
 # openai.api_key = os.environ['OPENAI_API_KEY']
+
+class AgentState(TypedDict):
+    """State definition for the LLM Pharma workflow agent."""
+    last_node: str
+    patient_prompt: str
+    patient_id: int
+    patient_data: dict
+    patient_profile: str
+    policy_eligible: bool
+    policies: List[Document]
+    checked_policy: Document
+    unchecked_policies: List[Document]
+    policy_qs: str
+    rejection_reason: str    
+    revision_number: int
+    max_revisions: int
+    trial_searches: int
+    max_trial_searches: int            
+    trials: List[Document]
+    relevant_trials: list[dict]
+    ask_expert: str
+
+def create_agent_state() -> AgentState:
+    """
+    Create the initial agent state for the LLM Pharma workflow.
+    
+    Returns:
+        AgentState: Initial state with default values
+    """
+    return {
+        "last_node": "",
+        "patient_prompt": "",
+        "patient_id": 0,
+        "patient_data": {},
+        "patient_profile": "",
+        "policy_eligible": False,
+        "policies": [],
+        "checked_policy": None,
+        "unchecked_policies": [],
+        "policy_qs": "",
+        "rejection_reason": "",
+        "revision_number": 0,
+        "max_revisions": 3,
+        "trial_searches": 0,
+        "max_trial_searches": 3,
+        "trials": [],
+        "relevant_trials": [],
+        "ask_expert": ""
+    }
+
+def create_workflow_builder(agent_state: AgentState) -> StateGraph:
+    """
+    Create the workflow builder with all nodes and edges for the LLM Pharma system.
+    
+    Args:
+        agent_state: The agent state definition
+        
+    Returns:
+        StateGraph: The configured workflow graph
+    """
+    # Create the state graph
+    builder = StateGraph(AgentState)
+    
+    # Set entry point
+    builder.set_entry_point("patient_collector")
+    
+    # Add nodes (placeholder implementations)
+    builder.add_node("patient_collector", patient_collector_node)
+    builder.add_node("policy_search", policy_search_node)
+    builder.add_node("policy_evaluator", policy_evaluator_node)
+    builder.add_node("trial_search", trial_search_node)
+    builder.add_node("grade_trials", grade_trials_node)
+    builder.add_node("profile_rewriter", profile_rewriter_node)
+    
+    # Add conditional edges
+    builder.add_conditional_edges(
+        "patient_collector", 
+        should_continue_patient, 
+        {
+            END: END,
+            "policy_search": "policy_search"
+        }
+    )
+    
+    builder.add_conditional_edges(
+        "policy_evaluator", 
+        should_continue_policy, 
+        {
+            "trial_search": "trial_search",
+            "policy_evaluator": "policy_evaluator",
+            END: END
+        }
+    )
+    
+    builder.add_edge("policy_search", "policy_evaluator")
+    builder.add_edge("trial_search", "grade_trials")
+    builder.add_edge("profile_rewriter", "trial_search")
+    
+    builder.add_conditional_edges(
+        "grade_trials", 
+        should_continue_trials, 
+        {
+            "profile_rewriter": "profile_rewriter",
+            END: END
+        }
+    )
+    
+    return builder
+
+def setup_sqlite_memory() -> SqliteSaver:
+    """
+    Setup SQLite memory for checkpointing the workflow state.
+    
+    Returns:
+        SqliteSaver: Configured SQLite saver for state persistence
+    """
+    # Create in-memory SQLite connection for checkpoints
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    memory = SqliteSaver(conn)
+    return memory
+
+
+
+# Placeholder node functions (to be implemented with actual logic)
+def patient_collector_node(state: AgentState) -> dict:
+    """Placeholder for patient collector node."""
+    # TODO: Implement actual patient data collection logic
+    return {
+        "last_node": "patient_collector",
+        "patient_data": state.get("patient_data", {}),
+        "patient_profile": state.get("patient_profile", ""),
+        "patient_id": state.get("patient_id", 0),
+        "revision_number": state.get("revision_number", 0) + 1,
+        'policy_eligible': 'N/A'
+    }
+
+def policy_search_node(state: AgentState) -> dict:
+    """Placeholder for policy search node."""
+    # TODO: Implement actual policy search logic
+    return {
+        "last_node": "policy_search",
+        "policies": [],
+        "unchecked_policies": [],
+    }
+
+def policy_evaluator_node(state: AgentState) -> dict:
+    """Placeholder for policy evaluator node."""
+    # TODO: Implement actual policy evaluation logic
+    return {
+        "last_node": "policy_evaluator",
+        "policy_eligible": True,
+        "rejection_reason": "",
+        "revision_number": state.get("revision_number", 0) + 1,
+        'checked_policy': None,
+        'policy_qs': ""
+    }
+
+def trial_search_node(state: AgentState) -> dict:
+    """Placeholder for trial search node."""
+    # TODO: Implement actual trial search logic
+    trial_searches = state.get('trial_searches', 0)
+    return {
+        'last_node': 'trial_search',
+        'trials': [],
+        'trial_searches': trial_searches + 1,
+    }
+
+def grade_trials_node(state: AgentState) -> dict:
+    """Placeholder for trial grading node."""
+    # TODO: Implement actual trial grading logic
+    return {
+        'last_node': 'grade_trials',
+        "relevant_trials": []
+    }
+
+def profile_rewriter_node(state: AgentState) -> dict:
+    """Placeholder for profile rewriter node."""
+    # TODO: Implement actual profile rewriting logic
+    return {
+        'last_node': 'profile_rewriter',
+        'patient_profile': state.get("patient_profile", "")
+    }
+
+# Conditional edge functions
+def should_continue_patient(state: AgentState) -> str:
+    """Determine if patient collection should continue."""
+    if state.get("patient_data"):
+        return "policy_search"
+    else:
+        return END
+
+def should_continue_policy(state: AgentState) -> str:
+    """Determine if policy evaluation should continue."""
+    if state.get("revision_number", 0) > state.get("max_revisions", 3):
+        return END
+    
+    more_policies = len(state.get("unchecked_policies", [])) > 0
+    if state.get("policy_eligible", False):
+        if more_policies:
+            return "policy_evaluator"
+        else:
+            return "trial_search"
+    else:
+        return END
+
+def should_continue_trials(state: AgentState) -> str:
+    """Determine if trial search should continue."""
+    relevant_trials = state.get("relevant_trials", [])
+    has_relevant_trial = any(trial.get('relevance_score') == 'Yes' for trial in relevant_trials)
+    
+    if state.get("trial_searches", 0) > state.get("max_trial_searches", 3):
+        return END
+    elif not has_relevant_trial:
+        return "profile_rewriter"
+    else:
+        return END
+
 
 def llm_completion(prompt, model=None, temperature=0, sys_content="You are a helpful assistant."):
     if model == None:
