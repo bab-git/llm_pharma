@@ -57,23 +57,23 @@ def create_workflow_graph():
         print(f"❌ Error creating workflow graph: {e}")
         return None
 
-def create_demo_graph():
-    """
-    Create a demo graph for testing the dashboard GUI.
-    This imports from the separate demo module.
-    """
-    try:
-        from .demo_graph import create_demo_graph
-        return create_demo_graph()
-    except ImportError:
-        # Fallback if relative import fails
-        try:
-            from demo_graph import create_demo_graph
-            return create_demo_graph()
-        except ImportError as e:
-            print(f"❌ Demo module not found: {e}")
-            print(" Please ensure demo_graph.py is in the frontend directory")
-            return None
+# def create_demo_graph():
+#     """
+#     Create a demo graph for testing the dashboard GUI.
+#     This imports from the separate demo module.
+#     """
+#     try:
+#         from .demo_graph import create_demo_graph
+#         return create_demo_graph()
+#     except ImportError:
+#         # Fallback if relative import fails
+#         try:
+#             from demo_graph import create_demo_graph
+#             return create_demo_graph()
+#         except ImportError as e:
+#             print(f"❌ Demo module not found: {e}")
+#             print(" Please ensure demo_graph.py is in the frontend directory")
+#             return None
 
 def launch_dashboard(host="127.0.0.1", port=7958, share=False, demo_mode=False):
     """
@@ -89,11 +89,17 @@ def launch_dashboard(host="127.0.0.1", port=7958, share=False, demo_mode=False):
         # Create workflow graph based on mode
         if demo_mode:
             print("🎭 Running in DEMO MODE with test data")
-            graph = create_demo_graph()
-            if graph is None:
-                print("❌ Failed to create demo graph")
+            try:
+                from demo_graph import create_demo_graph
+                graph = create_demo_graph()
+                if graph is None:
+                    print("❌ Failed to create demo graph")
+                    return
+                print("✅ Demo workflow graph created")
+            except ImportError as e:
+                print(f"❌ Demo module not found: {e}")
+                print(" Please ensure demo_graph.py is in the frontend directory")
                 return
-            print("✅ Demo workflow graph created")
         else:
             print("🏭 Running in PRODUCTION MODE with real backend")
             graph = create_workflow_graph()
