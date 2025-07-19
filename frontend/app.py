@@ -57,6 +57,36 @@ def create_workflow_graph():
         print(f"❌ Error creating workflow graph: {e}")
         return None
 
+def ensure_patient_database_exists():
+    """
+    Ensure the patient database exists by creating it if it doesn't.
+    This function calls create_demo_patient_database from helper functions.
+    """
+    try:
+        from backend.helper_functions import create_demo_patient_database
+        
+        print("📊 Checking patient database...")
+        
+        # Check if database already exists
+        db_path = "sql_server/patients.db"
+        if not os.path.isabs(db_path):
+            project_root = Path(__file__).parent.parent
+            db_path = project_root / db_path
+        
+        if db_path.exists():
+            print("✅ Patient database already exists")
+        else:
+            print("🔄 Creating demo patient database...")
+            create_demo_patient_database(str(db_path))
+            print("✅ Demo patient database created successfully")
+            
+    except ImportError as e:
+        print(f"❌ Could not import create_demo_patient_database: {e}")
+        print("💡 Please ensure backend.helper_functions is available")
+    except Exception as e:
+        print(f"❌ Error creating patient database: {e}")
+        print(" Continuing without patient database...")
+
 # def create_demo_graph():
 #     """
 #     Create a demo graph for testing the dashboard GUI.
@@ -80,6 +110,9 @@ def launch_dashboard(host="127.0.0.1", port=7958, share=False, demo_mode=False):
     Launch the Gradio dashboard using the trials_gui class.
     """
     print("🚀 Initializing LLM Pharma Dashboard...")
+    
+    # Ensure patient database exists before creating the workflow
+    ensure_patient_database_exists()
     
     try:
         # Import the GUI class
