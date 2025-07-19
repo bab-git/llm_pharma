@@ -1,5 +1,6 @@
 import gradio as gr
 import pandas as pd
+import os
 
 class trials_gui( ):
     SENTINEL_NONE = "__NONE__"
@@ -588,7 +589,7 @@ class trials_gui( ):
                     refresh_btn = gr.Button("Refresh")
                     # modify_btn = gr.Button("Modify")
                 # trials_bx = gr.Textbox(label="Retieved relevant trials based on patient's profile", lines=10, interactive=False)
-                trials_bx = gr.Dataframe(label="Retieved relevant trials based on patient's profile", wrap=True, interactive=True, max_height=1000)
+                trials_bx = gr.Dataframe(label="Retieved relevant trials based on patient's profile", wrap=True, interactive=True)
                 refresh_btn.click(fn=self.get_table, inputs=gr.Number("trials", visible=False), outputs=trials_bx)                
             
             with gr.Tab("Trials Scores"):
@@ -612,7 +613,7 @@ class trials_gui( ):
                 )
                 
                 # trials_scores_bx = gr.Textbox(label="Trials Scores based on patient's profile")
-                trials_scores_bx = gr.Dataframe(label="Trials Scores based on patient's profile", wrap=True, interactive=False, max_height=1000)
+                trials_scores_bx = gr.Dataframe(label="Trials Scores based on patient's profile", wrap=True, interactive=False)
                 refresh_btn.click(fn=self.get_table,  inputs=gr.Number("trials_scores", visible=False), outputs=trials_scores_bx)
             
             

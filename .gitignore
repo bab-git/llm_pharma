@@ -5,3 +5,6 @@ __pycache*
 data/
 chromadb/
 chroma_db/
+outputs/
+*.sqlite*
+*.db
