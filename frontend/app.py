@@ -3,15 +3,14 @@
 LLM Pharma Frontend App
 
 A clean Gradio dashboard for the LLM Pharma clinical trial management system.
-This app creates a dummy graph object to run the dashboard GUI.
+This app can run in production mode (with real backend) or demo mode (with dummy data).
 
 Usage:
-    python frontend/app.py [--port PORT] [--host HOST] [--share]
+    python frontend/app.py [--port PORT] [--host HOST] [--share] [--demo]
 """
 
 import os
 import sys
-import sqlite3
 import argparse
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
@@ -24,174 +23,61 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-def create_dummy_graph():
+def create_workflow_graph():
     """
-    Create a dummy graph object using the notebook code snippets.
-    This allows the dashboard GUI to run without the full backend setup.
+    Create the workflow graph using backend helper functions.
+    This is the production mode that uses real backend components.
     """
     try:
-        # Import required components
-        from typing import Annotated, List
-        from typing_extensions import TypedDict
-        from langgraph.graph.message import AnyMessage, add_messages
-        from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
-        from langchain_core.documents import Document
-        from langgraph.graph import StateGraph, END
-        from langgraph.checkpoint.sqlite import SqliteSaver
-        
-        print("✅ Successfully imported LangGraph components")
-        
-        # Define AgentState (from notebook snippet)
-        class AgentState(TypedDict):
-            last_node: str
-            patient_prompt: str
-            patient_id: int
-            patient_data: dict
-            patient_profile: str
-            policy_eligible: bool
-            policies: List[Document]
-            checked_policy: Document
-            unchecked_policies: List[Document]
-            policy_qs: str
-            rejection_reason: str    
-            revision_number: int
-            max_revisions: int
-            trial_searches: int
-            max_trial_searches: int            
-            trials: List[Document]
-            relevant_trials: list[dict]
-            ask_expert: str
-        
-        print("✅ AgentState defined")
-        
-        # Create dummy node functions
-        def dummy_patient_collector(state):
-            """Dummy patient collector node"""
-            return {
-                "last_node": "patient_collector",
-                "patient_data": {"age": 45, "condition": "test"},
-                "patient_profile": "Test patient profile",
-                "patient_id": 1,
-                "revision_number": 1,
-                'policy_eligible': 'N/A'
-            }
-        
-        def dummy_policy_search(state):
-            """Dummy policy search node"""
-            return {
-                "last_node": "policy_search",
-                "policies": [],
-                "unchecked_policies": [],
-            }
-        
-        def dummy_policy_evaluator(state):
-            """Dummy policy evaluator node"""
-            return {
-                "last_node": "policy_evaluator",
-                "policy_eligible": True,
-                "rejection_reason": "N/A",
-                "revision_number": 1,
-                'checked_policy': None,
-                'policy_qs': "",
-                'unchecked_policies': []
-            }
-        
-        def dummy_trial_search(state):
-            """Dummy trial search node"""
-            return {
-                'last_node': 'trial_search',
-                'trials': [],
-                'trial_searches': 1,
-            }
-        
-        def dummy_grade_trials(state):
-            """Dummy grade trials node"""
-            return {
-                'last_node': 'grade_trials',
-                "relevant_trials": []
-            }
-        
-        def dummy_profile_rewriter(state):
-            """Dummy profile rewriter node"""
-            return {
-                'last_node': 'profile_rewriter',
-                'patient_profile': "Updated test patient profile"
-            }
-        
-        # Dummy conditional functions
-        def dummy_should_continue_patient(state):
-            return "policy_search"
-        
-        def dummy_should_continue_policy(state):
-            return "trial_search"
-        
-        def dummy_should_continue_trials(state):
-            return END
-        
-        print("✅ Dummy node functions created")
-        
-        # Create StateGraph builder (from notebook snippet)
-        builder = StateGraph(AgentState)
-        builder.set_entry_point("patient_collector")
-        
-        # Add nodes
-        builder.add_node("patient_collector", dummy_patient_collector)
-        builder.add_node("policy_search", dummy_policy_search)
-        builder.add_node("policy_evaluator", dummy_policy_evaluator)
-        builder.add_node("trial_search", dummy_trial_search)
-        builder.add_node("grade_trials", dummy_grade_trials)
-        builder.add_node("profile_rewriter", dummy_profile_rewriter)
-        
-        # Add edges
-        builder.add_conditional_edges(
-            "patient_collector", 
-            dummy_should_continue_patient, 
-            {END: END, "policy_search": "policy_search"}
+        # Import backend helper functions
+        from backend.helper_functions import (
+            create_agent_state,
+            create_workflow_builder,
+            setup_sqlite_memory,
+            compile_workflow_graph
         )
         
-        builder.add_conditional_edges(
-            "policy_evaluator", 
-            dummy_should_continue_policy, 
-            {"trial_search": "trial_search", "policy_evaluator": "policy_evaluator", END: END}
-        )
+        # Create the workflow components
+        agent_state = create_agent_state()
+        builder = create_workflow_builder(agent_state)
+        memory = setup_sqlite_memory()
         
-        builder.add_edge("policy_search", "policy_evaluator")
-        builder.add_edge("trial_search", "grade_trials")
-        builder.add_edge("profile_rewriter", "trial_search")
-        
-        builder.add_conditional_edges(
-            "grade_trials", 
-            dummy_should_continue_trials, 
-            {"profile_rewriter": "profile_rewriter", END: END}
-        )
-        
-        print("✅ StateGraph builder created with nodes and edges")
-        
-        # Setup SQLite memory (from notebook snippet)
-        conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
-        memory = SqliteSaver(conn)
-        print("✅ SQLite memory initialized")
-        
-        # Compile graph (from notebook snippet)
-        graph = builder.compile(
-            checkpointer=memory,
+        # Compile the graph with interrupts
+        graph = compile_workflow_graph(
+            builder=builder,
+            memory=memory,
             interrupt_after=['patient_collector', 'policy_search', 'trial_search', 'grade_trials', 'profile_rewriter']
         )
         
-        print("✅ Graph compiled successfully")
         return graph
         
     except ImportError as e:
-        print(f"❌ Import error: {e}")
-        print("💡 Please ensure LangGraph and LangChain are installed")
+        print(f"❌ Backend components not found: {e}")
+        print("💡 Please ensure backend.helper_functions is available")
         return None
     except Exception as e:
-        print(f"❌ Error creating dummy graph: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Error creating workflow graph: {e}")
         return None
 
-def launch_dashboard(host="127.0.0.1", port=7958, share=False):
+def create_demo_graph():
+    """
+    Create a demo graph for testing the dashboard GUI.
+    This imports from the separate demo module.
+    """
+    try:
+        from .demo_graph import create_demo_graph
+        return create_demo_graph()
+    except ImportError:
+        # Fallback if relative import fails
+        try:
+            from demo_graph import create_demo_graph
+            return create_demo_graph()
+        except ImportError as e:
+            print(f"❌ Demo module not found: {e}")
+            print(" Please ensure demo_graph.py is in the frontend directory")
+            return None
+
+def launch_dashboard(host="127.0.0.1", port=7958, share=False, demo_mode=False):
     """
     Launch the Gradio dashboard using the trials_gui class.
     """
@@ -202,13 +88,22 @@ def launch_dashboard(host="127.0.0.1", port=7958, share=False):
         from src.helper_gui import trials_gui
         print("✅ Imported trials_gui class")
         
-        # Create dummy workflow graph
-        graph = create_dummy_graph()
-        if graph is None:
-            print("❌ Failed to create dummy graph")
-            return
-        
-        print("✅ Dummy workflow graph created")
+        # Create workflow graph based on mode
+        if demo_mode:
+            print("🎭 Running in DEMO MODE with test data")
+            graph = create_demo_graph()
+            if graph is None:
+                print("❌ Failed to create demo graph")
+                return
+            print("✅ Demo workflow graph created")
+        else:
+            print("🏭 Running in PRODUCTION MODE with real backend")
+            graph = create_workflow_graph()
+            if graph is None:
+                print("❌ Failed to create workflow graph")
+                print("💡 Try running with --demo for testing")
+                return
+            print("✅ Production workflow graph created")
         
         # Create the GUI application
         app = trials_gui(graph, share=share)
@@ -217,7 +112,6 @@ def launch_dashboard(host="127.0.0.1", port=7958, share=False):
         # Launch the interface
         print(f"🌐 Launching dashboard on http://{host}:{port}")
         print("🔔 Press Ctrl+C to stop the server")
-        print("💡 Note: This is running with dummy data for demonstration")
         
         # Launch with custom host/port if different from defaults
         if port != 7958 or host != "127.0.0.1":
@@ -236,15 +130,14 @@ def launch_dashboard(host="127.0.0.1", port=7958, share=False):
 def main():
     """Main entry point with CLI argument parsing."""
     parser = argparse.ArgumentParser(
-        description="LLM Pharma Frontend App (Dummy Mode)",
+        description="LLM Pharma Frontend App",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python frontend/app.py
-  python frontend/app.py --port 8080
-  python frontend/app.py --host 0.0.0.0 --share
-
-Note: This runs with dummy data for demonstration purposes.
+  python frontend/app.py                    # Production mode
+  python frontend/app.py --demo             # Demo mode with test data
+  python frontend/app.py --port 8080        # Custom port
+  python frontend/app.py --host 0.0.0.0 --share  # Public sharing
         """
     )
     
@@ -267,14 +160,19 @@ Note: This runs with dummy data for demonstration purposes.
         help="Create a public shareable link"
     )
     
+    parser.add_argument(
+        "--demo", 
+        action="store_true", 
+        help="Run in demo mode with test data (for testing GUI)"
+    )
+    
     args = parser.parse_args()
     
     print("🏥 LLM Pharma - Clinical Trial Management Dashboard")
-    print("🎭 Running in DUMMY MODE with test data")
     print("=" * 60)
     
     try:
-        launch_dashboard(host=args.host, port=args.port, share=args.share)
+        launch_dashboard(host=args.host, port=args.port, share=args.share, demo_mode=args.demo)
     except KeyboardInterrupt:
         print("\n👋 Dashboard stopped by user")
     except Exception as e:
