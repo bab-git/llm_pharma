@@ -98,8 +98,29 @@ Examples:
     print("=" * 60)
     
     try:
-        # Step 1: Download/create trials data
-        if not args.skip_data_download:
+        # Step 1: Try to load existing trials data, download if not available
+        df_trials = None
+        csv_path = None
+        
+        if trials_csv_path.exists():
+            print(f"📂 Found existing trials CSV file: {trials_csv_path}")
+            try:
+                import pandas as pd
+                df_trials = pd.read_csv(trials_csv_path)
+                csv_path = str(trials_csv_path)
+                print(f"✅ Successfully loaded existing trials data!")
+                print(f"📊 Total trials loaded: {len(df_trials)}")
+                
+                # Display sample data
+                print(f"\n📋 Sample trials data:")
+                print(df_trials.head(3).to_string(index=False))
+                
+            except Exception as e:
+                print(f"⚠️  Failed to load existing file: {e}")
+                print("🔄 Will download fresh data...")
+                df_trials = None
+        
+        if df_trials is None:
             print(f"📥 Downloading trials data...")
             print(f"🔍 Status filter: {args.status_filter}")
             
@@ -112,19 +133,13 @@ Examples:
             # Display sample data
             print(f"\n📋 Sample trials data:")
             print(df_trials.head(3).to_string(index=False))
-        else:
-            print(f"⏭️  Skipping data download, using existing file: {trials_csv_path}")
-            if not trials_csv_path.exists():
-                print(f"❌ Trials CSV file not found at: {trials_csv_path}")
-                print("Please run without --skip-data-download to download the data first")
-                sys.exit(1)
         
         # Step 2: Check if vector store already exists
         collection_path = vectorstore_path / "chroma.sqlite3"
         if collection_path.exists() and not args.force_recreate:
             print(f"\n⚠️  Vector store already exists at: {vectorstore_path}")
             print("Use --force-recreate to overwrite the existing vector store")
-            return
+            # return
         
         # Step 3: Create the vector store
         print(f"\n📚 Creating trials vector store...")
@@ -137,7 +152,8 @@ Examples:
             trials_csv_path=str(trials_csv_path),
             vectorstore_path=str(vectorstore_path),
             collection_name=args.collection_name,
-            status_filter=args.status_filter
+            status_filter=args.status_filter,
+            vstore_delete=True
         )
         
         print("\n✅ Trials vector store created successfully!")

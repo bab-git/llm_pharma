@@ -127,6 +127,8 @@ from langchain_community.vectorstores import Chroma
 from langchain_nomic import NomicEmbeddings
 import chromadb
 import json
+from langchain.chains.query_constructor.base import AttributeInfo
+from langchain.retrievers.self_query.base import SelfQueryRetriever
 
 class Patient_ID(BaseModel):
     """Model for extracting patient ID from user prompt."""
@@ -293,7 +295,7 @@ def create_demo_patient_database(db_path="sql_server/patients.db"):
     df = pd.DataFrame(data, columns=columns)
     
     # Save DataFrame to CSV in the same directory as the database
-    csv_path = db_path.replace('.db', '.csv')
+    csv_path = db_path.replace('.db', '.csv').replace('sql_server', 'data')
     df.to_csv(csv_path, index=False)
     
     # Create SQLite database
@@ -775,7 +777,8 @@ def create_policy_vectorstore(policy_file_path="source_data/instut_trials_policy
 def create_trial_vectorstore(trials_csv_path="data/trials_data.csv",
                            vectorstore_path="vector_store",
                            collection_name="trials",
-                           status_filter="recruiting"):
+                           status_filter="recruiting",
+                           vstore_delete=False):
     """
     Create a vector store from the clinical trials dataset.
     
@@ -788,6 +791,8 @@ def create_trial_vectorstore(trials_csv_path="data/trials_data.csv",
     Returns:
         Chroma: The created vector store
     """
+    import ast
+    
     # Convert to absolute paths relative to the project root
     if not os.path.isabs(trials_csv_path):
         project_root = os.path.dirname(os.path.dirname(__file__))
@@ -802,6 +807,13 @@ def create_trial_vectorstore(trials_csv_path="data/trials_data.csv",
     
     # Read trials data
     df_trials = pd.read_csv(trials_csv_path)
+    # Convert 'diseases' and 'drugs' columns from string to list
+
+    df_trials['diseases'] = df_trials['diseases'].apply(ast.literal_eval)
+    # df_trials['drugs'] = df_trials['drugs'].apply(ast.literal_eval)
+
+    print(trials_csv_path)
+    print(f"loaded trials: {len(df_trials)}")
     
     # Filter by status if specified
     if status_filter:
@@ -811,47 +823,86 @@ def create_trial_vectorstore(trials_csv_path="data/trials_data.csv",
     # Create documents for vector store
     trial_docs = []
     for i, row in df_trials.iterrows():
-        # Map diseases using the disease_map function
-        disease_categories = disease_map(row['diseases'])
-        
-        # Skip if disease category is 'other_conditions'
-        if 'other_conditions' in disease_categories:
+        disease = disease_map(row['diseases'])
+        if disease == 'other_conditions':
             continue
-            
-        # Create document
         doc = Document(
             page_content=row['criteria'],
             metadata={
                 "nctid": row['nctid'],
                 "status": row['status'],
+                # "why_stop": row['why_stop'],
+                # "label": row['label'],
+                # "phase": row['phase'],
                 "diseases": str(row['diseases']),
-                "disease_category": disease_categories[0] if disease_categories else 'other_conditions',
-                "drugs": row['drugs'],
-                "phase": row.get('phase', ''),
-                "label": row.get('label', '')
+                "disease_category": disease[0],
+                "drugs": row['drugs'],            
             }
         )
         trial_docs.append(doc)
-    
+    print(f"sample trial doc metadata:\n {trial_docs[0].metadata}")
+
     # Remove documents with very long content (>10000 characters)
-    trial_docs = [doc for doc in trial_docs if len(doc.page_content) <= 10000]
-    
+    # trial_docs = [doc for doc in trial_docs if len(doc.page_content) <= 10000]
+
+    list_remove = set()
+    for i, doc in enumerate(trial_docs):
+        if len(doc.page_content)>10000:
+            print(f"removing trial {i} because it's too long")
+            list_remove.add(i)
+            # print(doc.metadata)
+        if doc.metadata['disease_category'] == 'other_conditions':
+            print(f"removing trial {i} because it's for other conditions")
+            list_remove.add(i)
+            # print(doc.metadata)
+    # remove list_remove indexes from trial_docs
+    trial_docs = [doc for i, doc in enumerate(trial_docs) if i not in list_remove]
+
+    print(f"Number of trial docs to be added to the vector store: {len(trial_docs)}")
+    if len(trial_docs) == 0:
+        print(f"No trials to add to the vector store")
+        return None
+        
     # Create persistent client
     persistent_client = chromadb.PersistentClient(path=vectorstore_path)
-    
+
+    if vstore_delete == True:
+        try:
+            persistent_client.delete_collection(collection_name)
+            print(f"Collection {collection_name} is deleted")
+        except Exception:
+            print(f"Collection {collection_name} does not exist.")
+
+
+
     # Create or load vector store
     vectorstore = Chroma(
         client=persistent_client,
         collection_name=collection_name,
         embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
     )
-    
+    print(f"Number of trials to be added to the vector store: {len(trial_docs)}")
+
+
+
+
+
+    # if vstore_delete == True:
+    #     vectorstore.delete_collection()
+    #     vectorstore = Chroma(
+    #         client=persistent_client,
+    #         collection_name=collection_name,
+    #         embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
+    #     )    
+    #     print("vstore deleted")
+
     # Check if collection is empty and add documents if needed
     if vectorstore._collection.count() == 0:
         vectorstore = Chroma.from_documents(
             documents=trial_docs,
             client=persistent_client,
             collection_name=collection_name,
+            # persist_directory=vectorstore_path,
             embedding=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
         )
         print(f"✅ Trial vector store created with {len(trial_docs)} trials")
@@ -1033,15 +1084,88 @@ def policy_evaluator_node(state: AgentState) -> dict:
         }
 
 def trial_search_node(state: AgentState) -> dict:
-    """Placeholder for trial search node."""
-    # TODO: Implement actual trial search logic
-    trial_searches = state.get('trial_searches', 0)
-    return {
-        'last_node': 'trial_search',
-        'trials': [],
-        'trial_searches': trial_searches + 1,
-        "policy_eligible": state.get("policy_eligible", False)  # Preserve existing value
-    }
+    """
+    Trial search node that searches the trial database to retrieve clinical trials 
+    that match the patient's medical history using a self-query retriever.
+    
+    Args:
+        state: Current agent state containing patient profile
+        
+    Returns:
+        Updated state with retrieved trials
+    """
+    try:
+        # Get patient profile from state
+        patient_profile = state.get("patient_profile", "")
+        
+        if not patient_profile:
+            print("⚠️ No patient profile available for trial search")
+            return {
+                'last_node': 'trial_search',
+                'trials': [],
+                'trial_searches': state.get('trial_searches', 0) + 1,
+                "policy_eligible": state.get("policy_eligible", False)
+            }
+        
+        # Create configuration for this node
+        config = PatientCollectorConfig(use_free_model=True)
+        
+        # Create or load trial vector store
+        trial_vectorstore = create_trial_vectorstore()
+        print(f"Number of trials in the vector store: {trial_vectorstore._collection.count()}")
+        
+        metadata_field_info = [
+            AttributeInfo(
+                name="disease_category",
+                description="Defines the disease group of patients related to this trial. One of ['cancer', 'leukemia', 'mental_health']",
+                # description="The trial is for patients when their disease is related to this category. One of ['cancer', 'leukemia', 'mental_health']",
+                type="string",
+            ),
+            AttributeInfo(
+                name="drugs",
+                description="List of drug names used in the trial",
+                type="str",
+            ),    
+        ]
+
+        document_content_description = "The list of patient conditions to include or exclude them from the trial"
+        retriever_trial_sq = SelfQueryRetriever.from_llm(
+            config.model,
+            trial_vectorstore,
+            # vectorstore_trials_mpnet,
+            document_content_description,
+            metadata_field_info
+            # enable_limit=True
+        )
+        print(f"patient_profile: {patient_profile}")
+        # Create search question
+        question = f"""
+        Which trials are relevant to the patient with the following medical history?\n
+        patient_profile: {patient_profile}
+        """
+        
+        # Retrieve relevant trials
+        docs_retrieved = retriever_trial_sq.get_relevant_documents(question)
+        print(f"✅ Retrieved {len(docs_retrieved)} relevant trials")
+        
+        # Update trial searches counter
+        trial_searches = state.get('trial_searches', 0) + 1
+        
+        return {
+            'last_node': 'trial_search',
+            'trials': docs_retrieved,
+            'trial_searches': trial_searches,
+            "policy_eligible": state.get("policy_eligible", False)
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in trial search: {e}")
+        return {
+            'last_node': 'trial_search',
+            'trials': [],
+            'trial_searches': state.get('trial_searches', 0) + 1,
+            "policy_eligible": state.get("policy_eligible", False)
+        }
 
 def grade_trials_node(state: AgentState) -> dict:
     """Placeholder for trial grading node."""
@@ -1203,11 +1327,11 @@ def dataset_create_trials(status = None):
     df_trials = df_trials.drop(columns=['smiless','icdcodes'])
 
     # create ../data if it doesn't exist
-    if not os.path.exists('../data'):
-        os.makedirs('../data')
+    if not os.path.exists('data'):
+        os.makedirs('data')
         
-    df_trials.to_csv('../data/trials_data.csv', index=False)
-    csv_path = '../data/trials_data.csv'
+    df_trials.to_csv('data/trials_data.csv', index=False)
+    csv_path = 'data/trials_data.csv'
     print(f'The database for trials is saved to {csv_path} \n It has {len(df_trials)} rows.')
     
     return df_trials, csv_path
