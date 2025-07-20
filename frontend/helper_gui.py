@@ -1,5 +1,6 @@
 import gradio as gr
 import pandas as pd
+import os
 
 class trials_gui( ):
     SENTINEL_NONE = "__NONE__"
@@ -16,26 +17,46 @@ class trials_gui( ):
         #self.sdisps = {} #global    
         self.demo = self.create_interface()
 
-    def get_tab_notification(self, last_node, policy_eligible=None):
+    def get_tab_notification(self, current_state):
         """Determine which tab to notify user about based on current state"""
+
+        last_node = current_state.values.get("last_node", None)
+        nnode = current_state.values.get("next", None)        
         if not last_node:
-            return "Agent is starting..."
-        
+            return "Agent is working..."
+        policy_eligible = current_state.values.get("policy_eligible", None)
+        trial_found = current_state.values.get("trial_found")
+        trials = current_state.values.get("trials", [])
         # Map nodes to appropriate tab notifications
         node_to_tab = {
-            'patient_collector': 'Profile - Patient profile has been created',
-            'policy_search': 'Policies - Relevant policies have been retrieved', 
-            'policy_evaluator': 'Policy Issue - Policy evaluation completed',
-            'trial_search': 'Matched Trials - Clinical trials have been found',
-            'grade_trials': 'Trials Scores - Trial relevance scores are ready',
-            'profile_rewriter': 'Profile - Patient profile has been updated'
+            'patient_collector': 'Go to Profile Tab - Patient profile has been created',
+            'policy_search': 'Go to Policies Tab - Relevant policies have been retrieved', 
+            'policy_evaluator': 'Go to Policy Issue Tab - Policy evaluation completed',
+            'trial_search': 'Go to Potential Trials Tab - Potentially relevant clinical trials have been found',
+            'grade_trials': 'Go to Trials Scores Tab - Calculated Trial Relevance scores are ready',            
+            'profile_rewriter': 'Go to Profile Tab - Patient profile has been updated'
         }
         
         # Special case for policy issues
-        if last_node == 'policy_evaluator' and policy_eligible == False:
-            return 'Policy Issue - ATTENTION: Patient has policy conflicts that need review'
+        if trial_found == True:
+            return '🎉 Trial Scores - Perfectly Matched clinical trials have been found! 🎉'
+        elif last_node == 'grade_trials':
+            return """⚠️ Trials Scores - No matched trials found. Please review the relevance scores for more details.
+Your options:            
+   A - Continue with auto-generated profile rewriter,
+   B - Profile Tab - Manually modify the patient profile.            
+"""
+        elif last_node == 'policy_evaluator' and policy_eligible == False:
+            return 'Go to Policy Issue Tab - ATTENTION: Patient has policy conflicts that need review'
         elif last_node == 'policy_evaluator' and policy_eligible == True:
             return 'Agent continuing - Policy check passed, no action needed'
+        elif last_node == 'trial_search' and trials == []:
+            # if nnode == 'profile_rewriter':
+                # return 'Profile - No potential trials found. \n Continue: Use profile rewriter or manually modify the patient profile.'
+            if nnode == None:
+                return 'Agent Tab - The pipeline couldn\'t find any potential/relevant trials. Try another patient.'
+        elif last_node == 'profile_rewriter':
+            return 'Go to Profile Tab - The patient profile has been rewritten by the agent to increase the chances of finding relevant trials. You can also manually modify the patient profile.'
             
         return node_to_tab.get(last_node, f'Agent is at: {last_node}')
 
@@ -112,13 +133,43 @@ class trials_gui( ):
 
     def get_table(self, key = None):
         current_values = self.graph.get_state(self.thread)
+        
+        # Check if the state has been initialized with required keys
+        if not current_values.values or "last_node" not in current_values.values:
+            # Return placeholder data when state is not initialized
+            if key == "trials_scores":
+                return pd.DataFrame({
+                    'nctid': ['No data available'],
+                    'relevance_score': ['Start evaluation to see results'],
+                    'explanation': ['Please run the agent evaluation first'],
+                    'further_information': ['Click "Start Evaluation" in the Agent tab']
+                })
+            elif key == "trials":
+                return pd.DataFrame({
+                    'index': ['No data available'],
+                    'nctid': ['Start evaluation to see results'],
+                    'diseases': ['Please run the agent evaluation first'],
+                    'Criteria': ['Click "Start Evaluation" in the Agent tab']
+                })
+            else:
+                raise ValueError("key should be 'relevant_trials' or 'trials'")
+        
         last_node = current_values.values["last_node"]
         df = pd.DataFrame(columns=['no data available'])
+        
         if key == "trials_scores":
             if 'relevant_trials' in current_values.values:
                 scores = current_values.values['relevant_trials']
                 df = pd.DataFrame(scores)
                 df = df.reindex(columns=['nctid', 'relevance_score','explanation', 'further_information'])            
+            else:
+                # Return placeholder when no trials have been scored yet
+                df = pd.DataFrame({
+                    'nctid': ['No trials scored yet'],
+                    'relevance_score': ['Complete trial search first'],
+                    'explanation': ['Trials need to be retrieved and graded'],
+                    'further_information': ['Continue evaluation in the Agent tab']
+                })
         elif key == "trials":            
             if 'trials' in current_values.values:                
                 documents = current_values.values[key]                
@@ -129,6 +180,14 @@ class trials_gui( ):
                     diseases = doc.metadata["diseases"]
                     data.append({"index": idx, "nctid": nctid, "diseases": diseases , "Criteria": page_content})                
                 df = pd.DataFrame(data)                
+            else:
+                # Return placeholder when no trials have been retrieved yet
+                df = pd.DataFrame({
+                    'index': ['No trials retrieved yet'],
+                    'nctid': ['Complete policy evaluation first'],
+                    'diseases': ['Trials will be searched after policy check'],
+                    'Criteria': ['Continue evaluation in the Agent tab']
+                })
         else:
             raise ValueError("key should be 'relevant_trials' or 'trials'")            
         return df
@@ -148,7 +207,9 @@ class trials_gui( ):
             rejection_reason = current_values.values["rejection_reason"]
             value += f"""\nThe patient is rejected because of the following reason:
             {rejection_reason}
-\nYou can correct the patient's medical profile if required.            
+\nA - You can correct the patient's medical profile if required. --> Profile Tab
+B - You can skip this policy for the patient. --> Skip this conflicting policy
+C - You can skip the whole policy check stage for the patient. --> Skip the whole policy check stage            
             """
             # return gr.update(label=new_label, value=value)
         else:
@@ -211,7 +272,7 @@ class trials_gui( ):
         self.thread_id = new_thread_id
         return 
     
-    def modify_state(self,key,asnode,new_value):
+    def modify_state(self, key, asnode,new_value):
         ''' gets the current state, modifes a single value in the state identified by key, and updates state with it.
         note that this will create a new 'current state' node. If you do this multiple times with different keys, it will create
         one for each update. Note also that it doesn't resume after the update
@@ -261,6 +322,12 @@ class trials_gui( ):
             current_values.values['unchecked_policies'].pop(0)    
             # current_values.values['rejection_reason'] = 'N/A'
             asnode = "policy_evaluator"
+        elif key == 'policy_big_skip':
+            current_values = current_states[1]
+            change_list = [('policy_eligible', True), ('rejection_reason', 'N/A')]
+            current_values.values['unchecked_policies'] = []
+            asnode = "policy_evaluator"
+
         else:
             raise ValueError(f"unexpected key {key}")        
         
@@ -324,8 +391,9 @@ class trials_gui( ):
                     }
                 else:
                     # Get tab notification based on current state
-                    policy_eligible = current_state.values.get("policy_eligible")
-                    notification = self.get_tab_notification(current_state.values["last_node"], policy_eligible)
+                    # policy_eligible = current_state.values.get("policy_eligible")
+                    # trial_found = current_state.values.get("trial_found")
+                    notification = self.get_tab_notification(current_state)
                     
                     if current_state.values["policy_eligible"] == True:
                         eligible_bx_value = "✅ Yes"
@@ -405,9 +473,9 @@ class trials_gui( ):
                 )
                 
                 with gr.Row():
-                    last_node = gr.Textbox(label="last node", min_width=150)
+                    last_node = gr.Textbox(label="Agent'slast stop", min_width=150)
                     eligible_bx = gr.Textbox(label="Is Patient Eligible?", min_width=50)
-                    nnode_bx = gr.Textbox(label="next node", min_width=150)
+                    nnode_bx = gr.Textbox(label="Agent's next step", min_width=150)
                     threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80, visible=False)
                     search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110, visible=False)
                     count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110, visible=False)
@@ -425,7 +493,7 @@ class trials_gui( ):
                 # Function to show processing status
                 def show_processing():
                     return gr.update(
-                        value="🔄 **Agent is processing...** Please wait while the evaluation is in progress.",
+                        value="🔄 **AGENT IS PROCESSING...** \n Please wait while the evaluation is in progress.",
                         visible=True
                     )
                 
@@ -436,7 +504,13 @@ class trials_gui( ):
                 with gr.Accordion("Manage Agent", open=True):
                     checks = list(self.graph.nodes.keys())
                     checks.remove('__start__')
-                    stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks, scale=0, min_width=400)
+                    checks_values = checks.copy()
+                    # Fix: remove() only takes one argument at a time and 'policy_searcj' is a typo.
+                    # Should remove '__start__' and 'policy_search' if present.
+                    for node in ['__start__', 'policy_search', 'policy_evaluator', 'grade_trials', 'trial_search']:
+                        if node in checks:
+                            checks_values.remove(node)
+                    stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks_values, scale=0, min_width=400)
                     with gr.Row():
                         thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0, visible=False)
                         step_pd = gr.Dropdown(choices=['N/A'],interactive=True, label="select step", min_width=160, scale=1, visible=False)
@@ -444,7 +518,7 @@ class trials_gui( ):
                 # Add progress bar
                 # progress_bar =  gr.Progress()
                 
-                with gr.Accordion("Live Agent Output", open=False):
+                with gr.Accordion("Live Agent Output - for debugging", open=False):
                     live = gr.Textbox(label="", lines=10, max_lines=25)
         
                 # actions
@@ -500,7 +574,7 @@ class trials_gui( ):
                                                           gr.Number(self.SENTINEL_NONE, visible=False), profile],outputs=None).then(
                                  fn=updt_disp, inputs=None, outputs=sdisps)                                              
 
-            with gr.Tab("Policies"):
+            with gr.Tab("Relevant Policies"):
                 # Add informative text at the top of the Policies tab
                 policies_info = gr.Markdown(
                     value="""## 📜 Trial Policies Review
@@ -545,7 +619,8 @@ class trials_gui( ):
                 
                 with gr.Row():
                     refresh_btn = gr.Button("Refresh")
-                    skip_btn = gr.Button("Skip the policy")
+                    skip_btn = gr.Button("Skip this conflicting policy")
+                    big_skip_btn = gr.Button("Skip whole policy check stage")
                 policy_issue_bx = gr.Textbox(label="Policy Issue", lines=10, interactive=False)
                 
                 def skip_policy_and_notify():
@@ -555,15 +630,27 @@ class trials_gui( ):
                     # Return confirmation message
                     return gr.update(
                         label="Policy Skipped", 
-                        value="The current policy is skipped for this patient. Please continue evaluation in the Agent tab."
+                        value="The current policy is skipped for this patient.\n\nPlease continue evaluation of remaining policies in the Agent tab."
                     )
-                
+
+                def big_skip_policy_and_notify():
+                    """Skip the whole policy check and show confirmation message"""
+                    # Skip the policy in the state
+                    self.modify_state("policy_big_skip", self.SENTINEL_NONE, "")
+                    # Return confirmation message
+                    return gr.update(
+                        label="Policy Skipped", 
+                        value="✅ The 'policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches, via the Agent tab."
+                    )
+
                 refresh_btn.click(fn=self.get_issue_policy, inputs=None, outputs=policy_issue_bx)
                 skip_btn.click(fn=skip_policy_and_notify, inputs=None, outputs=policy_issue_bx).then(
                                 fn=updt_disp, inputs=None, outputs=sdisps)
+                big_skip_btn.click(fn=big_skip_policy_and_notify, inputs=None, outputs=policy_issue_bx).then(
+                                fn=updt_disp, inputs=None, outputs=sdisps)
                 
 
-            with gr.Tab("Matched Trials"):
+            with gr.Tab("Potential Trials"):
                 # Add informative text at the top of the Matched Trials tab
                 matched_trials_info = gr.Markdown(
                     value="""## 🎯 Matched Clinical Trials
@@ -588,7 +675,7 @@ class trials_gui( ):
                     refresh_btn = gr.Button("Refresh")
                     # modify_btn = gr.Button("Modify")
                 # trials_bx = gr.Textbox(label="Retieved relevant trials based on patient's profile", lines=10, interactive=False)
-                trials_bx = gr.Dataframe(label="Retieved relevant trials based on patient's profile", wrap=True, interactive=True, max_height=1000)
+                trials_bx = gr.Dataframe(label="Retieved relevant trials based on patient's profile", wrap=True, interactive=True)
                 refresh_btn.click(fn=self.get_table, inputs=gr.Number("trials", visible=False), outputs=trials_bx)                
             
             with gr.Tab("Trials Scores"):
@@ -598,10 +685,12 @@ class trials_gui( ):
 
 **🏆 Final results** - Detailed scoring and ranking of matched trials.
 
+**Understanding the score**🏆 Final results** - Detailed scoring and ranking of matched trials.
+
 **Understanding the scores:**
-- **🥇 Higher scores** = Better match for the patient
-- **📈 Multiple criteria** considered (eligibility, relevance, availability)
-- **📋 Read-only view** - scoring is automatically calculated
+- **✅ Relevant (Yes):** The patient's profile meets the trial's inclusion criteria and does not meet any exclusion criteria.
+- **❌ Not Relevant (No):** The patient's profile meets any exclusion criteria or does not meet the trial's inclusion diseases.
+- **🔄 Refresh** to get updated trial matches
 
 **This is typically your final destination** in the evaluation process.
 
@@ -610,9 +699,10 @@ class trials_gui( ):
 - **🔄 Re-run evaluation** from the 'Agent' tab""",
                     visible=True
                 )
-                
+                with gr.Row():
+                    refresh_btn = gr.Button("Refresh")
                 # trials_scores_bx = gr.Textbox(label="Trials Scores based on patient's profile")
-                trials_scores_bx = gr.Dataframe(label="Trials Scores based on patient's profile", wrap=True, interactive=False, max_height=1000)
+                trials_scores_bx = gr.Dataframe(label="Trials Scores based on patient's profile", wrap=True, interactive=False)
                 refresh_btn.click(fn=self.get_table,  inputs=gr.Number("trials_scores", visible=False), outputs=trials_scores_bx)
             
             
