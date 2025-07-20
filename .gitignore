@@ -8,3 +8,4 @@ chroma_db/
 outputs/
 *.sqlite*
 *.db
+vector_stor*/

@@ -212,7 +212,7 @@ class trials_gui( ):
         self.thread_id = new_thread_id
         return 
     
-    def modify_state(self,key,asnode,new_value):
+    def modify_state(self, key, asnode,new_value):
         ''' gets the current state, modifes a single value in the state identified by key, and updates state with it.
         note that this will create a new 'current state' node. If you do this multiple times with different keys, it will create
         one for each update. Note also that it doesn't resume after the update
@@ -262,6 +262,12 @@ class trials_gui( ):
             current_values.values['unchecked_policies'].pop(0)    
             # current_values.values['rejection_reason'] = 'N/A'
             asnode = "policy_evaluator"
+        elif key == 'policy_big_skip':
+            current_values = current_states[1]
+            change_list = [('policy_eligible', True), ('rejection_reason', 'N/A')]
+            current_values.values['unchecked_policies'] = []
+            asnode = "policy_evaluator"
+
         else:
             raise ValueError(f"unexpected key {key}")        
         
@@ -546,7 +552,8 @@ class trials_gui( ):
                 
                 with gr.Row():
                     refresh_btn = gr.Button("Refresh")
-                    skip_btn = gr.Button("Skip the policy")
+                    skip_btn = gr.Button("Skip this conflicting policy")
+                    big_skip_btn = gr.Button("Skip policy stage check")
                 policy_issue_bx = gr.Textbox(label="Policy Issue", lines=10, interactive=False)
                 
                 def skip_policy_and_notify():
@@ -558,9 +565,21 @@ class trials_gui( ):
                         label="Policy Skipped", 
                         value="The current policy is skipped for this patient.\nPlease continue evaluation of remaining policies in the Agent tab."
                     )
-                
+
+                def big_skip_policy_and_notify():
+                    """Skip the whole policy check and show confirmation message"""
+                    # Skip the policy in the state
+                    self.modify_state("policy_big_skip", self.SENTINEL_NONE, "")
+                    # Return confirmation message
+                    return gr.update(
+                        label="Policy Skipped", 
+                        value="✅ The policy check phase is completely skipped for this patient.\n Please continue the next phase, Trial searches, via the Agent tab."
+                    )
+
                 refresh_btn.click(fn=self.get_issue_policy, inputs=None, outputs=policy_issue_bx)
                 skip_btn.click(fn=skip_policy_and_notify, inputs=None, outputs=policy_issue_bx).then(
+                                fn=updt_disp, inputs=None, outputs=sdisps)
+                big_skip_btn.click(fn=big_skip_policy_and_notify, inputs=None, outputs=policy_issue_bx).then(
                                 fn=updt_disp, inputs=None, outputs=sdisps)
                 
 
