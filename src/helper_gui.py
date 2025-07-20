@@ -426,7 +426,7 @@ class trials_gui( ):
                 # Function to show processing status
                 def show_processing():
                     return gr.update(
-                        value="🔄 **Agent is processing...** Please wait while the evaluation is in progress.",
+                        value="🔄 **AGENT IS PROCESSING...** \n Please wait while the evaluation is in progress.",
                         visible=True
                     )
                 
@@ -445,7 +445,7 @@ class trials_gui( ):
                 # Add progress bar
                 # progress_bar =  gr.Progress()
                 
-                with gr.Accordion("Live Agent Output", open=False):
+                with gr.Accordion("Live Agent Output - for debugging", open=False):
                     live = gr.Textbox(label="", lines=10, max_lines=25)
         
                 # actions
@@ -556,7 +556,7 @@ class trials_gui( ):
                     # Return confirmation message
                     return gr.update(
                         label="Policy Skipped", 
-                        value="The current policy is skipped for this patient. Please continue evaluation in the Agent tab."
+                        value="The current policy is skipped for this patient.\nPlease continue evaluation of remaining policies in the Agent tab."
                     )
                 
                 refresh_btn.click(fn=self.get_issue_policy, inputs=None, outputs=policy_issue_bx)

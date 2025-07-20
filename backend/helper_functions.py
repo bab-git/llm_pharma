@@ -891,6 +891,7 @@ def policy_search_node(state: AgentState) -> dict:
         
         # Retrieve relevant policies
         docs_retrieved = retriever.get_relevant_documents(patient_profile)
+        print(f"Retrieved policies to be evaluated: {len(docs_retrieved)}")
         
         print(f"✅ Retrieved {len(docs_retrieved)} relevant policy sections")
         
@@ -1008,6 +1009,7 @@ def policy_evaluator_node(state: AgentState) -> dict:
         
         # Update state
         unchecked_policies.pop(0)  # Remove the evaluated policy
+        print(f"Remaining unchecked policies: {len(unchecked_policies)}")
         
         return {
             "last_node": "policy_evaluator",
