@@ -563,7 +563,7 @@ class trials_gui( ):
                     # Return confirmation message
                     return gr.update(
                         label="Policy Skipped", 
-                        value="The current policy is skipped for this patient.\nPlease continue evaluation of remaining policies in the Agent tab."
+                        value="The current policy is skipped for this patient.\n\nPlease continue evaluation of remaining policies in the Agent tab."
                     )
 
                 def big_skip_policy_and_notify():
@@ -573,7 +573,7 @@ class trials_gui( ):
                     # Return confirmation message
                     return gr.update(
                         label="Policy Skipped", 
-                        value="✅ The policy check phase is completely skipped for this patient.\n Please continue the next phase, Trial searches, via the Agent tab."
+                        value="✅ The 'policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches, via the Agent tab."
                     )
 
                 refresh_btn.click(fn=self.get_issue_policy, inputs=None, outputs=policy_issue_bx)
