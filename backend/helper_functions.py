@@ -156,6 +156,19 @@ class eligibility(BaseModel):
             },                
         }
 
+class grade(BaseModel):
+    """The result of the trial's relevance check as relevance score and explanation."""
+    relevance_score: str        
+    explanation: str = Field(description="Reasons to the given relevance score.")        
+    further_information: str
+
+class GradeHallucinations(BaseModel):
+    """Binary score and explanation for whether the LLM's generated answer is grounded in / supported by the facts in the patient's medical profile."""
+    binary_score: str = Field(
+        description="Answer is grounded in the patient's medical profile, 'yes' or 'no'"
+    )
+    Reason: str = Field(description="Reasons to the given relevance score.")
+
 class PatientCollectorConfig:
     """Configuration for patient collector node."""
     def __init__(self, use_free_model=True, db_path="sql_server/patients.db"):
@@ -430,6 +443,7 @@ class AgentState(TypedDict):
     trials: List[Document]
     relevant_trials: list[dict]
     ask_expert: str
+    trial_found: bool
 
 def create_agent_state() -> AgentState:
     """
@@ -456,7 +470,8 @@ def create_agent_state() -> AgentState:
         "max_trial_searches": 3,
         "trials": [],
         "relevant_trials": [],
-        "ask_expert": ""
+        "ask_expert": "",
+        "trial_found": False
     }
 
 def policy_tools(policy_qs: str, patient_profile: str, model_agent):
@@ -805,6 +820,38 @@ def create_trial_vectorstore(trials_csv_path="data/trials_data.csv",
     # Ensure vector store directory exists
     os.makedirs(vectorstore_path, exist_ok=True)
     
+    # Create persistent client
+    persistent_client = chromadb.PersistentClient(path=vectorstore_path)
+
+    if vstore_delete == True:
+        try:
+            persistent_client.delete_collection(collection_name)
+            print(f"Collection {collection_name} is deleted")
+        except Exception:
+            print(f"Collection {collection_name} does not exist.")
+
+    # Create or load vector store
+    vectorstore = Chroma(
+        client=persistent_client,
+        collection_name=collection_name,
+        embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
+    )
+
+
+    # if vstore_delete == True:
+    #     vectorstore.delete_collection()
+    #     vectorstore = Chroma(
+    #         client=persistent_client,
+    #         collection_name=collection_name,
+    #         embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
+    #     )    
+    #     print("vstore deleted")
+
+    if vectorstore._collection.count() > 0:        
+        print(f"✅ Trial vector store loaded with {vectorstore._collection.count()} trials")
+        return vectorstore
+    
+    
     # Read trials data
     df_trials = pd.read_csv(trials_csv_path)
     # Convert 'diseases' and 'drugs' columns from string to list
@@ -863,51 +910,20 @@ def create_trial_vectorstore(trials_csv_path="data/trials_data.csv",
         print(f"No trials to add to the vector store")
         return None
         
-    # Create persistent client
-    persistent_client = chromadb.PersistentClient(path=vectorstore_path)
-
-    if vstore_delete == True:
-        try:
-            persistent_client.delete_collection(collection_name)
-            print(f"Collection {collection_name} is deleted")
-        except Exception:
-            print(f"Collection {collection_name} does not exist.")
-
-
-
-    # Create or load vector store
-    vectorstore = Chroma(
-        client=persistent_client,
-        collection_name=collection_name,
-        embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
-    )
-    print(f"Number of trials to be added to the vector store: {len(trial_docs)}")
-
-
-
-
-
-    # if vstore_delete == True:
-    #     vectorstore.delete_collection()
-    #     vectorstore = Chroma(
-    #         client=persistent_client,
-    #         collection_name=collection_name,
-    #         embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
-    #     )    
-    #     print("vstore deleted")
+    
 
     # Check if collection is empty and add documents if needed
-    if vectorstore._collection.count() == 0:
-        vectorstore = Chroma.from_documents(
-            documents=trial_docs,
-            client=persistent_client,
-            collection_name=collection_name,
-            # persist_directory=vectorstore_path,
-            embedding=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
-        )
-        print(f"✅ Trial vector store created with {len(trial_docs)} trials")
-    else:
-        print(f"✅ Trial vector store loaded with {vectorstore._collection.count()} trials")
+    # if vectorstore._collection.count() == 0:
+    vectorstore = Chroma.from_documents(
+        documents=trial_docs,
+        client=persistent_client,
+        collection_name=collection_name,
+        # persist_directory=vectorstore_path,
+        embedding=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
+    )
+    print(f"✅ Trial vector store created with {len(trial_docs)} trials")
+    # else:
+    #     print(f"✅ Trial vector store loaded with {vectorstore._collection.count()} trials")
     
     return vectorstore
 
@@ -1168,13 +1184,145 @@ def trial_search_node(state: AgentState) -> dict:
         }
 
 def grade_trials_node(state: AgentState) -> dict:
-    """Placeholder for trial grading node."""
-    # TODO: Implement actual trial grading logic
-    return {
-        'last_node': 'grade_trials',
-        "relevant_trials": [],
-        "policy_eligible": state.get("policy_eligible", False)  # Preserve existing value
-    }
+    """
+    Trial grading node that evaluates the relevance of retrieved trials to the patient profile.
+    
+    Args:
+        state: Current agent state containing trials and patient profile
+        
+    Returns:
+        Updated state with graded trials
+    """
+    try:
+        print("----- CHECKING THE TRIALS RELEVANCE TO PATIENT PROFILE ----- ")
+        
+        trial_found = False
+        trials = state.get('trials', [])
+        patient_profile = state.get('patient_profile', '')
+        
+        if not trials:
+            print("⚠️ No trials available for grading")
+            return {
+                'last_node': 'grade_trials',
+                "relevant_trials": [],
+                "policy_eligible": state.get("policy_eligible", False)
+            }
+        
+        if not patient_profile:
+            print("⚠️ No patient profile available for trial grading")
+            return {
+                'last_node': 'grade_trials',
+                "relevant_trials": [],
+                "policy_eligible": state.get("policy_eligible", False)
+            }
+        
+        # Create configuration for this node
+        config = PatientCollectorConfig(use_free_model=True)
+        
+        # Create prompt for trial grading
+        prompt_grader = PromptTemplate(
+            template=""" 
+            You are a Principal Investigator (PI) for evaluating patients for clinical trials.\n
+            Your task is to evaluate the relevance of a clinical trial to the given patient's medical profile. \n
+            
+            
+            The clinical trial is related to these diseases: {trial_diseases} \n
+            Here are the inclusion and exclusion criteria of the trial: \n\n {document} \n\n
+            
+            ===============                
+            Use the following steps to determine relevance and provide the necessary fields in your response: \n
+            1- If the patient's profile meets any exclusion criteria, then the trial is not relevant --> relevance_score = 'No'. \n
+            2- If the patient has or had the trial's inclusion diseases, then it is relevant --> relevance_score = 'Yes'.\n        
+            3- If the patient did not have the trial's inclusion diseases, then it is not relevant --> relevance_score = 'No'.\n
+                           
+            Example 1: 
+    The patient has Arthritis and the trial is related to pancreatic cancer. --> relevance_score = 'No' \n
+            
+            Example 2: 
+    The patient has pancreatic cancer and the trial is also related to carcinoma pancreatic cancer. --> relevance_score = 'Yes' \n
+
+            Example 3: 
+    The patient has pancreatic cancer and the trial is related to breast cancer or ovarian cancer. --> relevance_score = 'No'. \n 
+
+            Bring your justification in the explanation. \n
+
+            Mention further information that is needed from the patient's medical history related to the trial's criteria \n
+
+            ===============
+            Here is the patient's medical profile: {patient_profile} \n\n
+            """,
+            input_variables=["document", "patient_profile", "trial_diseases"],
+        )
+        
+        # Create hallucination detection prompt
+        system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n 
+             Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
+        hallucination_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system),
+                ("human", "Patient's medical profile: \n\n {patient_profile} \n\n LLM generation: {explanation}"),
+            ]
+        )
+        
+        # Create chains
+        llm_with_tool = config.model.with_structured_output(grade)
+        retrieval_grader = prompt_grader | llm_with_tool
+        
+        llm_with_tool_hallucination = config.model.with_structured_output(GradeHallucinations)
+        hallucination_grader = hallucination_prompt | llm_with_tool_hallucination
+        
+        # Score each trial
+        relevant_trials = []
+        for trial in trials:
+            doc_txt = trial.page_content
+            trial_diseases = trial.metadata['diseases']
+            nctid = trial.metadata['nctid']
+            print(f"---GRADER: TRIAL {nctid}: ---") 
+            
+            trial_score = retrieval_grader.invoke(
+                {
+                    "patient_profile": patient_profile, 
+                    "document": doc_txt, 
+                    "trial_diseases": trial_diseases
+                }
+            )
+                
+            relevance_score = trial_score.relevance_score
+            trial_score_dic = dict(trial_score)
+            trial_score_dic['nctid'] = nctid                    
+
+            if relevance_score.lower() == "yes":   
+                # Hallucination check         
+                explanation = trial_score.explanation            
+                factual_score = hallucination_grader.invoke({"patient_profile": patient_profile, "explanation": explanation})
+                factual_score_grade = factual_score.binary_score            
+                if factual_score_grade == "no":
+                    print("--- HALLUCINATION: MODEL'S EXPLANATION IS NOT GROUNDED IN PATIENT PROFILE --> REJECTED---")
+                    trial_score_dic['relevance_score'] = 'no'
+                    trial_score_dic['explanation'] = "Agent's Hallucination"
+
+            if relevance_score.lower() == "yes" and factual_score_grade == "yes":
+                print(f"---TRIAL RELEVANT---")  
+                trial_found = True
+            else:
+                print(f"--- TRIAL NOT RELEVANT---")
+
+            relevant_trials.append(trial_score_dic)
+            
+        return {
+            'last_node': 'grade_trials',
+            "relevant_trials": relevant_trials,
+            "policy_eligible": state.get("policy_eligible", False),
+            "trial_found": trial_found
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in trial grading: {e}")
+        return {
+            'last_node': 'grade_trials',
+            "relevant_trials": [],
+            "policy_eligible": state.get("policy_eligible", False)
+        }
 
 def profile_rewriter_node(state: AgentState) -> dict:
     """Placeholder for profile rewriter node."""

@@ -154,7 +154,7 @@ def launch_dashboard(host="127.0.0.1", port=7958, share=False, demo_mode=False):
     # Ensure all databases and vector stores exist before creating the workflow
     ensure_patient_database_exists()
     ensure_trial_database_exists()
-    ensure_vector_stores_exist()
+    # ensure_vector_stores_exist()
     
     try:
         # Import the GUI class
