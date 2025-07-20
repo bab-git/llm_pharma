@@ -17,28 +17,46 @@ class trials_gui( ):
         #self.sdisps = {} #global    
         self.demo = self.create_interface()
 
-    def get_tab_notification(self, last_node, policy_eligible=None, trial_found=False):
+    def get_tab_notification(self, current_state):
         """Determine which tab to notify user about based on current state"""
+
+        last_node = current_state.values.get("last_node", None)
+        nnode = current_state.values.get("next", None)        
         if not last_node:
-            return "Agent is starting..."
-        
+            return "Agent is working..."
+        policy_eligible = current_state.values.get("policy_eligible", None)
+        trial_found = current_state.values.get("trial_found")
+        trials = current_state.values.get("trials", [])
         # Map nodes to appropriate tab notifications
         node_to_tab = {
-            'patient_collector': 'Profile - Patient profile has been created',
-            'policy_search': 'Policies - Relevant policies have been retrieved', 
-            'policy_evaluator': 'Policy Issue - Policy evaluation completed',
-            'trial_search': 'Matched Trials - Potentially relevant clinical trials have been found',
-            'grade_trials': 'Trials Scores - Calculated Trial Relevance scores are ready',            
-            'profile_rewriter': 'Profile - Patient profile has been updated'
+            'patient_collector': 'Go to Profile Tab - Patient profile has been created',
+            'policy_search': 'Go to Policies Tab - Relevant policies have been retrieved', 
+            'policy_evaluator': 'Go to Policy Issue Tab - Policy evaluation completed',
+            'trial_search': 'Go to Potential Trials Tab - Potentially relevant clinical trials have been found',
+            'grade_trials': 'Go to Trials Scores Tab - Calculated Trial Relevance scores are ready',            
+            'profile_rewriter': 'Go to Profile Tab - Patient profile has been updated'
         }
         
         # Special case for policy issues
         if trial_found == True:
             return '🎉 Trial Scores - Perfectly Matched clinical trials have been found! 🎉'
+        elif last_node == 'grade_trials':
+            return """⚠️ Trials Scores - No matched trials found. Please review the relevance scores for more details.
+Your options:            
+   A - Continue with auto-generated profile rewriter,
+   B - Profile Tab - Manually modify the patient profile.            
+"""
         elif last_node == 'policy_evaluator' and policy_eligible == False:
-            return 'Policy Issue - ATTENTION: Patient has policy conflicts that need review'
+            return 'Go to Policy Issue Tab - ATTENTION: Patient has policy conflicts that need review'
         elif last_node == 'policy_evaluator' and policy_eligible == True:
             return 'Agent continuing - Policy check passed, no action needed'
+        elif last_node == 'trial_search' and trials == []:
+            # if nnode == 'profile_rewriter':
+                # return 'Profile - No potential trials found. \n Continue: Use profile rewriter or manually modify the patient profile.'
+            if nnode == None:
+                return 'Agent Tab - The pipeline couldn\'t find any potential/relevant trials. Try another patient.'
+        elif last_node == 'profile_rewriter':
+            return 'Go to Profile Tab - The patient profile has been rewritten by the agent to increase the chances of finding relevant trials. You can also manually modify the patient profile.'
             
         return node_to_tab.get(last_node, f'Agent is at: {last_node}')
 
@@ -189,7 +207,9 @@ class trials_gui( ):
             rejection_reason = current_values.values["rejection_reason"]
             value += f"""\nThe patient is rejected because of the following reason:
             {rejection_reason}
-\nYou can correct the patient's medical profile if required.            
+\nA - You can correct the patient's medical profile if required. --> Profile Tab
+B - You can skip this policy for the patient. --> Skip this conflicting policy
+C - You can skip the whole policy check stage for the patient. --> Skip the whole policy check stage            
             """
             # return gr.update(label=new_label, value=value)
         else:
@@ -371,9 +391,9 @@ class trials_gui( ):
                     }
                 else:
                     # Get tab notification based on current state
-                    policy_eligible = current_state.values.get("policy_eligible")
-                    trial_found = current_state.values.get("trial_found")
-                    notification = self.get_tab_notification(current_state.values["last_node"], policy_eligible, trial_found)
+                    # policy_eligible = current_state.values.get("policy_eligible")
+                    # trial_found = current_state.values.get("trial_found")
+                    notification = self.get_tab_notification(current_state)
                     
                     if current_state.values["policy_eligible"] == True:
                         eligible_bx_value = "✅ Yes"
@@ -453,9 +473,9 @@ class trials_gui( ):
                 )
                 
                 with gr.Row():
-                    last_node = gr.Textbox(label="last node", min_width=150)
+                    last_node = gr.Textbox(label="Agent'slast stop", min_width=150)
                     eligible_bx = gr.Textbox(label="Is Patient Eligible?", min_width=50)
-                    nnode_bx = gr.Textbox(label="next node", min_width=150)
+                    nnode_bx = gr.Textbox(label="Agent's next step", min_width=150)
                     threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80, visible=False)
                     search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110, visible=False)
                     count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110, visible=False)
@@ -484,7 +504,13 @@ class trials_gui( ):
                 with gr.Accordion("Manage Agent", open=True):
                     checks = list(self.graph.nodes.keys())
                     checks.remove('__start__')
-                    stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks, scale=0, min_width=400)
+                    checks_values = checks.copy()
+                    # Fix: remove() only takes one argument at a time and 'policy_searcj' is a typo.
+                    # Should remove '__start__' and 'policy_search' if present.
+                    for node in ['__start__', 'policy_search', 'policy_evaluator', 'grade_trials', 'trial_search']:
+                        if node in checks:
+                            checks_values.remove(node)
+                    stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks_values, scale=0, min_width=400)
                     with gr.Row():
                         thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0, visible=False)
                         step_pd = gr.Dropdown(choices=['N/A'],interactive=True, label="select step", min_width=160, scale=1, visible=False)
@@ -548,7 +574,7 @@ class trials_gui( ):
                                                           gr.Number(self.SENTINEL_NONE, visible=False), profile],outputs=None).then(
                                  fn=updt_disp, inputs=None, outputs=sdisps)                                              
 
-            with gr.Tab("Policies"):
+            with gr.Tab("Relevant Policies"):
                 # Add informative text at the top of the Policies tab
                 policies_info = gr.Markdown(
                     value="""## 📜 Trial Policies Review
@@ -624,7 +650,7 @@ class trials_gui( ):
                                 fn=updt_disp, inputs=None, outputs=sdisps)
                 
 
-            with gr.Tab("Matched Trials"):
+            with gr.Tab("Potential Trials"):
                 # Add informative text at the top of the Matched Trials tab
                 matched_trials_info = gr.Markdown(
                     value="""## 🎯 Matched Clinical Trials

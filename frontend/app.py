@@ -44,7 +44,7 @@ def create_workflow_graph():
         # Compile the graph directly with interrupts
         graph = builder.compile(
             checkpointer=memory,
-            interrupt_after=['patient_collector', 'policy_search', 'trial_search', 'grade_trials', 'profile_rewriter']
+            interrupt_after=['patient_collector', 'trial_search', 'grade_trials', 'profile_rewriter']
         )
         
         return graph

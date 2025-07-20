@@ -174,7 +174,7 @@ class PatientCollectorConfig:
     def __init__(self, use_free_model=True, db_path="sql_server/patients.db"):
         self.use_free_model = use_free_model
         self.db_path = db_path
-        self.modelID_groq = "gemma2-9b-it"
+        self.modelID_groq = "llama-3.3-70b-versatile"
         self.modelID = "gpt-3.5-turbo"
         
         # Initialize models
@@ -467,7 +467,7 @@ def create_agent_state() -> AgentState:
         "revision_number": 0,
         "max_revisions": 3,
         "trial_searches": 0,
-        "max_trial_searches": 3,
+        "max_trial_searches": 2,
         "trials": [],
         "relevant_trials": [],
         "ask_expert": "",
@@ -621,8 +621,18 @@ def create_workflow_builder(agent_state: AgentState) -> StateGraph:
         }
     )
     
+    builder.add_conditional_edges(
+        "trial_search", 
+        should_continue_trial_search, 
+        {
+            "grade_trials": "grade_trials",
+            # "profile_rewriter": "profile_rewriter",
+            END: END
+        }
+    )
+
     builder.add_edge("policy_search", "policy_evaluator")
-    builder.add_edge("trial_search", "grade_trials")
+    # builder.add_edge("trial_search", "grade_trials")
     builder.add_edge("profile_rewriter", "trial_search")
     
     builder.add_conditional_edges(
@@ -1325,13 +1335,84 @@ def grade_trials_node(state: AgentState) -> dict:
         }
 
 def profile_rewriter_node(state: AgentState) -> dict:
-    """Placeholder for profile rewriter node."""
-    # TODO: Implement actual profile rewriting logic
-    return {
-        'last_node': 'profile_rewriter',
-        'patient_profile': state.get("patient_profile", ""),
-        "policy_eligible": state.get("policy_eligible", False)  # Preserve existing value
-    }
+    """
+    Profile rewriter node that rewrites patient profile when no relevant trials are found.
+    
+    Args:
+        state: Current agent state containing patient data
+        
+    Returns:
+        Updated state with rewritten patient profile
+    """
+    try:
+        # Get patient data from state
+        patient_data = state.get("patient_data", {})
+        
+        if not patient_data:
+            print("⚠️ No patient data available for profile rewriting")
+            return {
+                'last_node': 'profile_rewriter',
+                'patient_profile': state.get("patient_profile", ""),
+                "policy_eligible": state.get("policy_eligible", False)
+            }
+        
+        # Create configuration for this node
+        config = PatientCollectorConfig(use_free_model=True)
+        
+        # Create system prompt for profile rewriting
+        system = """
+A trial cross match resulted in no trials for the patient.
+As a clinical specialist write a medical profile for this patient and see if their disease(s) can be relevant to any of these categories of mental_health, cancer, or leukemia.
+If yes, then suggest relevant medical trial categories for the agent.
+If no, then do not add anything there.
+
+Your output must be as below:
+<a text summary of original profile>
+Suggested relevant trials:
+<bullet points of relevant medical trial categories from the above with a one line reason>
+
+Only include categories which can be related to patient diseases in more often cases.
+Disregard categories which occasionally or in some cases can be relevant to patient diseases.
+
+example:
+The patient is a X-year-old with a medical history of Y. They have participated ........  previous trials, and their trial status and completion date .........
+Suggested relevant trials:
+category X: [patient's disease] can be related to X due to Y.
+"""
+        
+        # Create profile rewriter prompt
+        re_write_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system),
+                (
+                    "human",
+                    "Here is a patient data:\n\n {patient_data} \n write a patient profile.",
+                ),
+            ]
+        )
+        
+        # Create profile rewriter chain
+        profile_rewriter_chain = re_write_prompt | config.model | StrOutputParser()
+        
+        # Generate rewritten patient profile
+        patient_profile_rewritten = profile_rewriter_chain.invoke({"patient_data": patient_data})
+        
+        # Print in capitals
+        print("--- PROFILE REWRITER: PATIENT'S PROFILE REWRITTEN ---")
+        
+        return {
+            'last_node': 'profile_rewriter',
+            'patient_profile': patient_profile_rewritten,
+            "policy_eligible": state.get("policy_eligible", False)
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in profile rewriting: {e}")
+        return {
+            'last_node': 'profile_rewriter',
+            'patient_profile': state.get("patient_profile", ""),
+            "policy_eligible": state.get("policy_eligible", False)
+        }
 
 # Conditional edge functions
 def should_continue_patient(state: AgentState) -> str:
@@ -1355,14 +1436,29 @@ def should_continue_policy(state: AgentState) -> str:
     else:
         return END
 
+def should_continue_trial_search(state: AgentState) -> str:
+    """Determine if trial search should continue."""
+    # relevant_trials = state.get("relevant_trials", [])
+    # has_trial_math = any(trial.get('relevance_score') == 'Yes' for trial in relevant_trials)
+    trials = state.get("trials", [])
+    has_potential_trial = trials != []
+    
+    # if state.get("trial_searches", 0) > state.get("max_trial_searches", 2):
+    #     print("--- TRIAL SEARCH: MAX TRIAL SEARCHES REACHED --> END ---")
+    #     return END
+    if has_potential_trial:        
+        return "grade_trials"
+    else:
+        return END
+
 def should_continue_trials(state: AgentState) -> str:
     """Determine if trial search should continue."""
     relevant_trials = state.get("relevant_trials", [])
-    has_relevant_trial = any(trial.get('relevance_score') == 'Yes' for trial in relevant_trials)
+    has_trial_math = any(trial.get('relevance_score') == 'Yes' for trial in relevant_trials)    
     
     if state.get("trial_searches", 0) > state.get("max_trial_searches", 3):
         return END
-    elif not has_relevant_trial:
+    elif not has_trial_math:
         return "profile_rewriter"
     else:
         return END
