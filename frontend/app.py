@@ -158,7 +158,7 @@ def launch_dashboard(host="127.0.0.1", port=7958, share=False, demo_mode=False):
     
     try:
         # Import the GUI class
-        from src.helper_gui import trials_gui
+        from frontend.helper_gui import trials_gui
         print("✅ Imported trials_gui class")
         
         # Create workflow graph based on mode
