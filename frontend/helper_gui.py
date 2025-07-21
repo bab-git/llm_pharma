@@ -24,6 +24,12 @@ class trials_gui( ):
         nnode = current_state.values.get("next", None)        
         if not last_node:
             return "Agent is working..."
+        
+        # Check for error messages first
+        error_message = current_state.values.get("error_message", "")
+        if error_message:
+            return error_message
+            
         policy_eligible = current_state.values.get("policy_eligible", None)
         trial_found = current_state.values.get("trial_found")
         trials = current_state.values.get("trials", [])
@@ -65,13 +71,18 @@ Your options:
         #global response, max_iterations, iterations, threads
         if start:
             self.iterations.append(0)
+            # Get the current selected model from the state
+            current_values = self.graph.get_state(self.thread)
+            selected_model = current_values.values.get("selected_model", "llama-3.3-70b-versatile") if current_values.values else "llama-3.3-70b-versatile"
+            
             config = {
                 'patient_prompt': patient_prompt,
                 "max_revisions": 10,
                 "revision_number": 0,
                 "trial_searches": 0,
                 "max_trial_searches": 3,
-                'last_node': ""}
+                'last_node': "",
+                'selected_model': selected_model}
             self.thread_id += 1  # new agent, new thread
             self.threads.append(self.thread_id)
         else:
@@ -122,7 +133,46 @@ Your options:
         if key in current_values.values:
             return gr.update(value=current_values.values[key])
         else:
-            return gr.update(value="")  
+            return gr.update(value="")
+    
+    def get_patient_profile_with_formatting(self):
+        """Get patient profile with preserved textbox formatting (multi-line support)."""
+        current_values = self.graph.get_state(self.thread)
+        if "patient_profile" in current_values.values:
+            return gr.update(value=current_values.values["patient_profile"], lines=5)
+        else:
+            return gr.update(value="", lines=5)
+    
+    def get_groq_models(self):
+        """Get a list of Groq models with tool calling capabilities, sorted by performance."""
+        return [
+            # High Performance Models (Tool Calling + High Quality)
+            ("llama-3.3-70b-versatile", "🦙 Llama 3.3 70B Versatile (Best)", "⭐⭐⭐⭐⭐"),
+            ("llama-3.1-8b-versatile", "🦙 Llama 3.1 8B Versatile (Fast)", "⭐⭐⭐⭐"),
+            ("llama-3.1-405b-reasoning", "🦙 Llama 3.1 405B Reasoning (Best Reasoning)", "⭐⭐⭐⭐⭐"),
+            ("llama-3.1-70b-versatile", "🦙 Llama 3.1 70B Versatile (Balanced)", "⭐⭐⭐⭐"),
+            
+            # Good Performance Models
+            ("llama-3.1-8b-instruct", "🦙 Llama 3.1 8B Instruct (Fast)", "⭐⭐⭐"),
+            ("llama-3.1-70b-instruct", "🦙 Llama 3.1 70B Instruct (Good)", "⭐⭐⭐⭐"),
+            
+            # Alternative Models
+            ("gemma2-9b-it", "💎 Gemma2 9B IT (Fast)", "⭐⭐⭐"),
+            ("gemma2-27b-it", "💎 Gemma2 27B IT (Good)", "⭐⭐⭐⭐"),
+            ("mixtral-8x7b-32768", "🎯 Mixtral 8x7B (Balanced)", "⭐⭐⭐⭐"),
+            
+            # Smaller/Faster Models
+            ("llama-3.1-1b-instruct", "🦙 Llama 3.1 1B Instruct (Very Fast)", "⭐⭐"),
+            ("llama-3.1-3b-instruct", "🦙 Llama 3.1 3B Instruct (Fast)", "⭐⭐⭐"),
+        ]
+    
+    def get_model_id_from_display_name(self, display_name):
+        """Convert display name back to model ID."""
+        models = self.get_groq_models()
+        for model_id, disp_name, _ in models:
+            if disp_name == display_name:
+                return model_id
+        return "llama-3.3-70b-versatile"  # Default fallback  
     
     def get_content(self, key):
         current_values = self.graph.get_state(self.thread)
@@ -215,9 +265,6 @@ Your options:
             rejection_reason = current_values.values["rejection_reason"]
             value += f"""\nThe patient is rejected because of the following reason:
             {rejection_reason}
-\nA - You can correct the patient's medical profile if required. --> Profile Tab
-B - You can skip this policy for the patient. --> Skip this conflicting policy
-C - You can skip the whole policy check stage for the patient. --> Skip the whole policy check stage            
             """
             # return gr.update(label=new_label, value=value)
         else:
@@ -436,21 +483,24 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
             if policy_eligible is True:
                 status_icon = "✅"
                 status_text = "PASSED"
+                policy_status = f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
             elif policy_eligible is False:
                 status_icon = "❌"
                 status_text = "FAILED"
-                if rejection_reason and rejection_reason != "N/A":
-                    status_text += f" - {rejection_reason}"
+                policy_status = f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
+                
+                # Add rejection reason prominently
+                if rejection_reason:
+                    policy_status += f"\n\n🚨 **Rejection Reason:**\n{rejection_reason}"
             else:
                 status_icon = "❓"
                 status_text = "UNKNOWN"
-            
-            policy_status = f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
+                policy_status = f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
         
-        last_node, nnode, thread_id, rev, astep = self.get_disp_state()
-        new_label = f"Policy Status (last_node: {last_node}, rev: {rev})"
+        # last_node, nnode, thread_id, rev, astep = self.get_disp_state()
+        # new_label = f"Policy Status (last_node: {last_node}, rev: {rev})"
         
-        return gr.update(label=new_label, value=policy_status)
+        return gr.update(value=policy_status)
 
     def get_stages_history(self):
         """Get the history of stages/nodes that have been executed."""
@@ -489,6 +539,30 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
             return gr.update(
                 label="Stages History (Error)",
                 value=f"Error retrieving stages: {str(e)}"
+            )
+
+    def get_current_policies(self):
+        """Get the current policies from the agent state."""
+        current_values = self.graph.get_state(self.thread)
+        
+        if not current_values.values or "last_node" not in current_values.values:
+            return gr.update(
+                label="📜 Current Policies in Agent State",
+                value="No policies loaded yet - Start evaluation to see policies"
+            )
+        
+        # Check if we have policies in the state
+        if 'policies' in current_values.values and current_values.values['policies']:
+            policies = current_values.values['policies']
+            policies_text = "\n\n".join(f"**Policy {i+1}:**\n{doc.page_content}" for i, doc in enumerate(policies))
+            
+            # new_label = "📜 Policies Related to the Patient"
+            
+            return gr.update(value=policies_text)
+        else:
+            return gr.update(
+                label="📜 Policies Related to the Patient",
+                value="No policies found in current state - Policy search may not be complete"
             )
 
     def create_interface(self):
@@ -618,12 +692,28 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                 )
                 
                 with gr.Row():
-                    prompt_bx = gr.Textbox(label="Prompt about patient", value="Is patient_ID 56 eligible for any medical trial?")
+                    with gr.Column(scale=2):
+                        prompt_bx = gr.Textbox(label="Prompt about patient", value="Is patient_ID 56 eligible for any medical trial?")
+                    with gr.Column(scale=1):
+                        patient_id_dropdown = gr.Dropdown(
+                            choices=[f"Patient {i}" for i in range(1, 100)],
+                            label="Select Patient ID",
+                            value="Patient 56",
+                            interactive=True
+                        )
+                        model_dropdown = gr.Dropdown(
+                            choices=[display_name for _, display_name, _ in self.get_groq_models()],
+                            label="🤖 Select AI Model",
+                            value="🦙 Llama 3.3 70B Versatile (Best)",
+                            interactive=True
+                        )
                     tab_notification = gr.Textbox(
                         value="Ready to start agent evaluation",
                         label="🔔 Your Next Action 🔔",
+                        lines=4,
                         interactive=False,
                         visible=True,
+                        scale=3
                     )
                 
                 # Add processing indicator
@@ -681,7 +771,7 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                     with gr.Row():
                         current_profile = gr.Textbox(
                             label="",
-                            lines=1,
+                            lines=5,
                             interactive=True,
                             placeholder="Patient profile will appear here after evaluation starts..."
                         )
@@ -691,31 +781,39 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                         value="## ⚠️ Policy Conflict Resolution",
                         visible=True
                     )
-                    policy_conflict_info = gr.Markdown(
-                        value="""**🚨 When policy conflicts occur** - Review and resolve policy issues.
 
-**Your options:**
-- 🔄 **Refresh** to review the specific policy issue
-- ⏭️ **Skip policy** if not applicable to this patient
-- 🔙 **Modify patient profile** to better match policies
+                    with gr.Row():
+                        with gr.Column(scale=3):
+                            policy_conflict_info = gr.Markdown(
+                                value="""**🚨 Policy Conflict Detected**
 
-**When to skip:**
-- Policy doesn't apply to patient's condition
-- Policy is outdated or incorrectly matched
-- Manual review determines patient should proceed""",
-                        visible=False
-                    )
+- **⏭️ Skip if this policy is not relevant**
+- **🔧 Modify patient profile if needed**
+- **⏭️⏭️ Skip all policy checks for the patient**""",
+                                visible=False
+                            )
+                        with gr.Column(scale=1):
+                            policy_skip_btn = gr.Button("⏭️ Skip Policy", min_width=120)
+                            policy_big_skip_btn = gr.Button("⏭️ Skip All Policies", min_width=140)
+                    
                     with gr.Row():
-                        policy_refresh_btn = gr.Button("🔄 Refresh", scale=0, min_width=100)
-                        policy_skip_btn = gr.Button("⏭️ Skip Policy", scale=0, min_width=120)
-                        policy_big_skip_btn = gr.Button("⏭️ Skip All Policies", scale=0, min_width=140)
-                    with gr.Row():
-                        policy_status = gr.Textbox(
-                            label="⚠️ Policy Conflict Resolution", 
-                            lines=3,
-                            interactive=False,
-                            placeholder="Policy status will appear here after policy evaluation..."
-                        )
+                        # Left column: Current Policies
+                        with gr.Column(scale=1):
+                            current_policies = gr.Textbox(
+                                label="📜 Policies Related to the Patient", 
+                                lines=15,
+                                interactive=False,
+                                placeholder="Current policies will appear here after policy search..."
+                            )
+                        
+                        # Right column: Policy Issues
+                        with gr.Column(scale=1):
+                            policy_status = gr.Textbox(
+                                label="⚠️ Policy Issues & Conflicts", 
+                                lines=4,
+                                interactive=False,
+                                placeholder="Policy issues will appear here when conflicts are detected..."
+                            )
                     
                     # 3. Trials Summary Table
                     with gr.Row():
@@ -771,15 +869,24 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                                         "last_node" in current_values.values and 
                                         current_values.values["last_node"] in ["policy_search", "policy_evaluator", "trial_search", "grade_trials", "profile_rewriter"])
                     
+                    # Check if policy conflict buttons should be shown (policy_evaluator with no next node)
+                    policy_conflict_buttons_visible = (current_values.values and 
+                                                     "last_node" in current_values.values and 
+                                                     current_values.values["last_node"] == "policy_evaluator" and 
+                                                     (current_values.next is None or len(current_values.next) == 0))
+                    
                     return [
-                        self.get_state_value_only("patient_profile"),  # current_profile - keep original label
+                        self.get_patient_profile_with_formatting(),  # current_profile - preserve multi-line formatting
+                        self.get_current_policies(),        # current_policies
                         self.get_last_policy_status(),      # policy_status  
                         self.get_trials_summary_table(),    # trials_summary
                         self.get_stages_history(),          # stages_history
                         gr.update(visible=profile_ready),   # profile_help - show only when profile is ready
                         gr.update(visible=True),            # profile_title - always visible
                         gr.update(visible=policy_search_done),  # policy_conflict_info - show only when policy search is done
-                        gr.update(visible=True)             # policy_title - always visible
+                        gr.update(visible=True),            # policy_title - always visible
+                        gr.update(visible=policy_conflict_buttons_visible),  # policy_skip_btn - show only when policy conflict detected
+                        gr.update(visible=policy_conflict_buttons_visible)   # policy_big_skip_btn - show only when policy conflict detected
                     ]
                 
                 # Add progress bar
@@ -792,7 +899,7 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                 sdisps =[prompt_bx,tab_notification,last_node,eligible_bx, nnode_bx,threadid_bx,count_bx,step_pd,thread_pd, search_bx]
                 
                 # Add the new status components to the display list
-                status_components = [current_profile, policy_status, trials_summary, stages_history, profile_help, profile_title, policy_conflict_info, policy_title]
+                status_components = [current_profile, current_policies, policy_status, trials_summary, stages_history, profile_help, profile_title, policy_conflict_info, policy_title, policy_skip_btn, policy_big_skip_btn]
                 
                 # Add debug mode toggle functionality
                 debug_mode.change(
@@ -816,8 +923,7 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                     fn=refresh_all_status, inputs=None, outputs=status_components
                 )
                 
-                # Wire up the policy conflict resolution buttons
-                policy_refresh_btn.click(fn=self.get_issue_policy, inputs=None, outputs=policy_status)
+
                 
                 def skip_policy_and_notify():
                     """Skip the current policy and show confirmation message"""
@@ -838,6 +944,23 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                         label="Policy Skipped", 
                         value="✅ The 'policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches, via the Agent tab."
                     )
+                
+                def update_prompt_from_patient_id(patient_selection):
+                    """Update the prompt text box when a patient ID is selected from dropdown"""
+                    if patient_selection and patient_selection.startswith("Patient "):
+                        patient_id = patient_selection.split(" ")[1]
+                        return f"Is patient_ID {patient_id} eligible for any medical trial?"
+                    return "Is patient_ID 56 eligible for any medical trial?"
+                
+                def update_selected_model(model_display_name):
+                    """Update the selected model in the agent state"""
+                    model_id = self.get_model_id_from_display_name(model_display_name)
+                    # Update the state with the new model
+                    current_values = self.graph.get_state(self.thread)
+                    if current_values.values:
+                        current_values.values["selected_model"] = model_id
+                        self.graph.update_state(self.thread, current_values.values)
+                    return f"✅ Model updated to: {model_display_name}"
                 
                 policy_skip_btn.click(fn=skip_policy_and_notify, inputs=None, outputs=policy_status).then(
                                 fn=updt_disp, inputs=None, outputs=sdisps).then(
@@ -866,6 +989,20 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                                fn=hide_processing, inputs=None, outputs=processing_status).then(
                                fn=updt_disp, inputs=None, outputs=sdisps).then(
                                fn=refresh_all_status, inputs=None, outputs=status_components)
+                
+                # Wire up the patient ID dropdown to update the prompt
+                patient_id_dropdown.change(
+                    fn=update_prompt_from_patient_id,
+                    inputs=[patient_id_dropdown],
+                    outputs=[prompt_bx]
+                )
+                
+                # Wire up the model dropdown to update the selected model
+                model_dropdown.change(
+                    fn=update_selected_model,
+                    inputs=[model_dropdown],
+                    outputs=[tab_notification]
+                )
         
                                               
 

@@ -171,18 +171,30 @@ class GradeHallucinations(BaseModel):
 
 class PatientCollectorConfig:
     """Configuration for patient collector node."""
-    def __init__(self, use_free_model=True, db_path="sql_server/patients.db"):
+    def __init__(self, use_free_model=True, db_path="sql_server/patients.db", selected_model=None):
         self.use_free_model = use_free_model
         self.db_path = db_path
-        # self.modelID_groq = "gemma2-9b-it"
+        
+        # Use selected model or default to best performing model
+        if selected_model:
+            self.modelID_groq = selected_model
+            self.modelID_groq_tool = selected_model
+        else:
+            self.modelID_groq = "llama-3.3-70b-versatile"  # Best default
+            self.modelID_groq_tool = "llama-3.3-70b-versatile"
+        
+        # DEBUG:
         self.modelID_groq = "llama3-8b-8192"
-        # self.modelID_groq = "llama-3.3-70b-versatile"
+        self.modelID_groq_tool = "llama-3.1-8b-instant"
+
+
         self.modelID = "gpt-3.5-turbo"
         
         # Initialize models
         if use_free_model:
             self.model = ChatGroq(model=self.modelID_groq, temperature=0)
-            print(f"Using Groq model: {self.modelID_groq}")
+            self.model_tool = ChatGroq(model=self.modelID_groq_tool, temperature=0)
+            print(f"Using Groq models: generic:{self.modelID_groq} and tool use:{self.modelID_groq_tool}")
         else:
             self.model = ChatOpenAI(temperature=0.0, model=self.modelID)
             print(f"Using OpenAI model: {self.modelID}")
@@ -446,6 +458,8 @@ class AgentState(TypedDict):
     relevant_trials: list[dict]
     ask_expert: str
     trial_found: bool
+    error_message: str
+    selected_model: str
 
 def create_agent_state() -> AgentState:
     """
@@ -473,8 +487,79 @@ def create_agent_state() -> AgentState:
         "trials": [],
         "relevant_trials": [],
         "ask_expert": "",
-        "trial_found": False
+        "trial_found": False,
+        "error_message": "",
+        "selected_model": "llama-3.3-70b-versatile"
     }
+
+def extract_error_message(e: Exception, context: str) -> str:
+    """
+    Extract and format error message from an exception, with special handling for rate limit errors.
+    
+    Args:
+        e: The exception that occurred
+        context: The context where the error occurred (e.g., "trial search", "patient collection")
+        
+    Returns:
+        Formatted error message string
+    """
+    # Check if it's a rate limit error
+    if hasattr(e, 'body') and hasattr(e.body, 'get'):
+        error_body = e.body.get('error', {})
+        if isinstance(error_body, dict) and 'message' in error_body:
+            error_msg = error_body['message']
+            if 'rate limit' in error_msg.lower() or 'rate limit reached' in error_msg.lower():
+                return f"🚨 Rate limit reached for the AI model. Please try later or select a different model. Error: {error_msg}"
+            else:
+                return f"❌ Error in {context}: {error_msg}"
+        else:
+            return f"❌ Error in {context}: {str(e)}"
+    else:
+        return f"❌ Error in {context}: {str(e)}"
+
+def get_groq_models():
+    """
+    Get a list of Groq models with tool calling capabilities, sorted by performance.
+    
+    Returns:
+        List of tuples: (model_id, display_name, performance_rating)
+    """
+    return [
+        # High Performance Models (Tool Calling + High Quality)
+        ("llama-3.3-70b-versatile", "🦙 Llama 3.3 70B Versatile (Best)", "⭐⭐⭐⭐⭐"),
+        ("llama-3.1-8b-versatile", "🦙 Llama 3.1 8B Versatile (Fast)", "⭐⭐⭐⭐"),
+        ("llama-3.1-405b-reasoning", "🦙 Llama 3.1 405B Reasoning (Best Reasoning)", "⭐⭐⭐⭐⭐"),
+        ("llama-3.1-70b-versatile", "🦙 Llama 3.1 70B Versatile (Balanced)", "⭐⭐⭐⭐"),
+        
+        # Good Performance Models
+        ("llama-3.1-8b-instruct", "🦙 Llama 3.1 8B Instruct (Fast)", "⭐⭐⭐"),
+        ("llama-3.1-70b-instruct", "🦙 Llama 3.1 70B Instruct (Good)", "⭐⭐⭐⭐"),
+        
+        # Alternative Models
+        ("gemma2-9b-it", "💎 Gemma2 9B IT (Fast)", "⭐⭐⭐"),
+        ("gemma2-27b-it", "💎 Gemma2 27B IT (Good)", "⭐⭐⭐⭐"),
+        ("mixtral-8x7b-32768", "🎯 Mixtral 8x7B (Balanced)", "⭐⭐⭐⭐"),
+        
+        # Smaller/Faster Models
+        ("llama-3.1-1b-instruct", "🦙 Llama 3.1 1B Instruct (Very Fast)", "⭐⭐"),
+        ("llama-3.1-3b-instruct", "🦙 Llama 3.1 3B Instruct (Fast)", "⭐⭐⭐"),
+    ]
+
+def get_model_display_name(model_id: str) -> str:
+    """
+    Get the display name for a model ID.
+    
+    Args:
+        model_id: The model ID
+        
+    Returns:
+        Display name for the model
+    """
+    models = get_groq_models()
+    for mid, display_name, _ in models:
+        if mid == model_id:
+            return display_name
+    return model_id  # Return the ID if not found
 
 def policy_tools(policy_qs: str, patient_profile: str, model_agent):
     """
@@ -674,40 +759,58 @@ def patient_collector_node(state: AgentState) -> dict:
     Returns:
         Updated state with patient data and profile
     """
-    # Create configuration for this node
-    config = PatientCollectorConfig(use_free_model=True)
-    
-    patient_data_prompt = """You are a helpful assistance in extracting patient's medical history.
+    try:
+        # Get selected model from state
+        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
+        
+        # Create configuration for this node
+        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
+        
+        patient_data_prompt = """You are a helpful assistance in extracting patient's medical history.
 Based on the following request identify and return the patient's ID number.
 """
 
-    response = config.model.with_structured_output(Patient_ID).invoke([
-        SystemMessage(content=patient_data_prompt),
-        HumanMessage(content=state['patient_prompt'])
-    ])
-    patient_id = response.patient_id
-    print(f"Patient ID: {patient_id}")
-    
-    patient_data = get_patient_data(patient_id, config.db_path)
-    print(patient_data)
-    
-    if patient_data is not None:        
-        if patient_data.get('name'):
-            del patient_data['patient_id']
-            del patient_data['name']
-        patient_profile = config.chain_profile.invoke({'patient_data': patient_data})
-    else:
-        patient_profile = ""
-        print(f"No patient found with ID: {patient_id}")
+        response = config.model.with_structured_output(Patient_ID).invoke([
+            SystemMessage(content=patient_data_prompt),
+            HumanMessage(content=state['patient_prompt'])
+        ])
+        patient_id = response.patient_id
+        print(f"Patient ID: {patient_id}")
+        
+        patient_data = get_patient_data(patient_id, config.db_path)
+        print(patient_data)
+        
+        if patient_data is not None:        
+            if patient_data.get('name'):
+                del patient_data['patient_id']
+                del patient_data['name']
+            patient_profile = config.chain_profile.invoke({'patient_data': patient_data})
+        else:
+            patient_profile = ""
+            print(f"No patient found with ID: {patient_id}")
 
-    return {
-        "last_node": "patient_collector",
-        "patient_data": patient_data or {},
-        "patient_profile": patient_profile,
-        "patient_id": patient_id,
-        "revision_number": state.get("revision_number", 0) + 1,
-        "policy_eligible": False  # Initialize this key to prevent KeyError
-    }
+        return {
+            "last_node": "patient_collector",
+            "patient_data": patient_data or {},
+            "patient_profile": patient_profile,
+            "patient_id": patient_id,
+            "revision_number": state.get("revision_number", 0) + 1,
+            "policy_eligible": False  # Initialize this key to prevent KeyError
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in patient collection: {e}")
+        error_message = extract_error_message(e, "patient collection")
+        
+        return {
+            "last_node": "patient_collector",
+            "patient_data": {},
+            "patient_profile": "",
+            "patient_id": 0,
+            "revision_number": state.get("revision_number", 0) + 1,
+            "policy_eligible": False,
+            "error_message": error_message
+        }
 
 def create_policy_vectorstore(policy_file_path="source_data/instut_trials_policy.md", 
                             vectorstore_path="vector_store", 
@@ -983,11 +1086,14 @@ def policy_search_node(state: AgentState) -> dict:
         
     except Exception as e:
         print(f"❌ Error in policy search: {e}")
+        error_message = extract_error_message(e, "policy search")
+        
         return {
             "last_node": "policy_search",
             "policies": [],
             "unchecked_policies": [],
-            "policy_eligible": state.get("policy_eligible", False)
+            "policy_eligible": state.get("policy_eligible", False),
+            "error_message": error_message
         }
 
 def policy_evaluator_node(state: AgentState) -> dict:
@@ -1033,8 +1139,11 @@ def policy_evaluator_node(state: AgentState) -> dict:
                 'policy_qs': ""
             }
         
+        # Get selected model from state
+        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
+        
         # Create configuration for this node
-        config = PatientCollectorConfig(use_free_model=True)
+        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
         
         # Create policy questions prompt
         prompt_rps = PromptTemplate(
@@ -1063,11 +1172,11 @@ def policy_evaluator_node(state: AgentState) -> dict:
         print(f"✅ Generated policy questions: {policy_qs}")
         
         # Evaluate policy using tools
-        result = policy_tools(policy_qs, patient_profile, config.model)
+        result = policy_tools(policy_qs, patient_profile, config.model_tool)
         print(f"✅ Policy evaluation result: {result}")
         
         # Parse the evaluation result using structured output
-        llm_with_tools = config.model.bind_tools([eligibility])
+        llm_with_tools = config.model_tool.bind_tools([eligibility])
         message = f"""Evaluation of the patient's eligibility:
         {result}\n\n
         Is the patient eligible according to this policy?"""
@@ -1102,13 +1211,16 @@ def policy_evaluator_node(state: AgentState) -> dict:
         
     except Exception as e:
         print(f"❌ Error in policy evaluation: {e}")
+        error_message = extract_error_message(e, "policy evaluation")
+        
         return {
             "last_node": "policy_evaluator",
             "policy_eligible": False,
             "rejection_reason": f"Error during evaluation: {str(e)}",
             "revision_number": state.get("revision_number", 0) + 1,
             'checked_policy': None,
-            'policy_qs': ""
+            'policy_qs': "",
+            "error_message": error_message
         }
 
 def trial_search_node(state: AgentState) -> dict:
@@ -1135,8 +1247,11 @@ def trial_search_node(state: AgentState) -> dict:
                 "policy_eligible": state.get("policy_eligible", False)
             }
         
+        # Get selected model from state
+        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
+        
         # Create configuration for this node
-        config = PatientCollectorConfig(use_free_model=True)
+        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
         
         # Create or load trial vector store
         trial_vectorstore = create_trial_vectorstore()
@@ -1188,11 +1303,14 @@ def trial_search_node(state: AgentState) -> dict:
         
     except Exception as e:
         print(f"❌ Error in trial search: {e}")
+        error_message = extract_error_message(e, "trial search")
+        
         return {
             'last_node': 'trial_search',
             'trials': [],
             'trial_searches': state.get('trial_searches', 0) + 1,
-            "policy_eligible": state.get("policy_eligible", False)
+            "policy_eligible": state.get("policy_eligible", False),
+            "error_message": error_message
         }
 
 def grade_trials_node(state: AgentState) -> dict:
@@ -1228,8 +1346,11 @@ def grade_trials_node(state: AgentState) -> dict:
                 "policy_eligible": state.get("policy_eligible", False)
             }
         
+        # Get selected model from state
+        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
+        
         # Create configuration for this node
-        config = PatientCollectorConfig(use_free_model=True)
+        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
         
         # Create prompt for trial grading
         prompt_grader = PromptTemplate(
@@ -1330,10 +1451,13 @@ def grade_trials_node(state: AgentState) -> dict:
         
     except Exception as e:
         print(f"❌ Error in trial grading: {e}")
+        error_message = extract_error_message(e, "trial grading")
+        
         return {
             'last_node': 'grade_trials',
             "relevant_trials": [],
-            "policy_eligible": state.get("policy_eligible", False)
+            "policy_eligible": state.get("policy_eligible", False),
+            "error_message": error_message
         }
 
 def profile_rewriter_node(state: AgentState) -> dict:
@@ -1358,8 +1482,11 @@ def profile_rewriter_node(state: AgentState) -> dict:
                 "policy_eligible": state.get("policy_eligible", False)
             }
         
+        # Get selected model from state
+        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
+        
         # Create configuration for this node
-        config = PatientCollectorConfig(use_free_model=True)
+        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
         
         # Create system prompt for profile rewriting
         system = """
@@ -1410,10 +1537,13 @@ category X: [patient's disease] can be related to X due to Y.
         
     except Exception as e:
         print(f"❌ Error in profile rewriting: {e}")
+        error_message = extract_error_message(e, "profile rewriting")
+        
         return {
             'last_node': 'profile_rewriter',
             'patient_profile': state.get("patient_profile", ""),
-            "policy_eligible": state.get("policy_eligible", False)
+            "policy_eligible": state.get("policy_eligible", False),
+            "error_message": error_message
         }
 
 # Conditional edge functions
