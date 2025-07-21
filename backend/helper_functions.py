@@ -422,30 +422,6 @@ def add_patient_data(patient_data: dict, db_path="../data/patients.db"):
     conn.commit()
     conn.close()
 
-# def initialize_patient_collector_system(use_free_model=True, db_path="sql_server/patients.db", force_recreate_db=False):
-#     """
-#     Initialize the patient collector system by creating database and configuration.
-    
-#     Args:
-#         use_free_model: Whether to use free Groq model or OpenAI
-#         db_path: Path to the SQLite database file
-#         force_recreate_db: Whether to recreate the database even if it exists
-        
-#     Returns:
-#         PatientCollectorConfig: Configured patient collector
-#     """
-#     # Create database if it doesn't exist or if forced
-#     if not os.path.exists(db_path) or force_recreate_db:
-#         print("Creating demo patient database...")
-#         create_demo_patient_database(db_path)
-#     else:
-#         print(f"Using existing database at: {db_path}")
-    
-    # Create and return configuration
-    # config = PatientCollectorConfig(use_free_model=use_free_model, db_path=db_path)
-    # print("Patient collector system initialized successfully!")
-    # return config
-
 class AgentState(TypedDict):
     """State definition for the LLM Pharma workflow agent."""
     last_node: str

@@ -1009,7 +1009,7 @@ You can obtain more information about each trial's details and possible relevanc
                 gen_btn.click(vary_btn,gr.Number("secondary", visible=False), gen_btn).then(
                               vary_btn,gr.Number("primary", visible=False), cont_btn).then(
                               fn=show_processing, inputs=None, outputs=processing_status).then(
-                              fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live, trials_summary],show_progress=True).then(
+                              fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live, policy_status, trials_summary],show_progress=True).then(
                               fn=hide_processing, inputs=None, outputs=processing_status).then(
                               fn=updt_disp, inputs=None, outputs=sdisps).then(
                               fn=refresh_all_status, inputs=None, outputs=status_components)
