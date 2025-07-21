@@ -185,7 +185,8 @@ class PatientCollectorConfig:
         
         # DEBUG:
         self.modelID_groq = "llama3-8b-8192"
-        self.modelID_groq_tool = "llama-3.1-8b-instant"
+        # self.modelID_groq_tool = "llama-3.1-8b-instant"
+        self.modelID_groq_tool = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 
         self.modelID = "gpt-3.5-turbo"
@@ -589,23 +590,23 @@ def policy_tools(policy_qs: str, patient_profile: str, model_agent):
     )
 
     @tool("date_today-tool")
-    def date_today() -> datetime.date:
-        "returns today date"
-        return datetime.today().date()    
+    def date_today() -> str:
+        "Returns today's date in YYYY-MM-DD format"
+        return datetime.today().date().strftime("%Y-%m-%d")    
 
     def date_difference(date1: date, date2: date) -> int:
         "The number of months date1 is before date2"
         month_difference = (date2.year - date1.year) * 12 + date2.month - date1.month
-        return f'{month_difference} months'
+        return month_difference
 
     class dates(BaseModel):
-        date1: date = Field(description="first date")
-        date2: date = Field(description="second date")
+        date1: date = Field(description="first date in YYYY-MM-DD format")
+        date2: date = Field(description="second date in YYYY-MM-DD format")
 
     date_difference_tool = StructuredTool.from_function(
         func=date_difference,
         name="date_difference",
-        description="The number of months first date is before second date",
+        description="Calculate the number of months between two dates. Returns an integer.",
         args_schema=dates,
     )
 
@@ -613,26 +614,48 @@ def policy_tools(policy_qs: str, patient_profile: str, model_agent):
         date: str = Field(description="A date string in the format YYYY-MM-DD")    
 
     @tool("date_convert-tool", args_schema=date_class)
-    def date_convert(date: str) -> date:
-        "Converts a date string to a date object"
-        date = datetime.strptime(date, "%Y-%m-%d").date()
-        return date
+    def date_convert(date: str) -> str:
+        "Converts a date string to a standardized date format YYYY-MM-DD"
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+            return parsed_date.strftime("%Y-%m-%d")
+        except ValueError:
+            return "Invalid date format. Please use YYYY-MM-DD."
 
     @tool("date_split-tool", args_schema=date_class)
-    def date_split(date: str) -> date:
-        "Extracts the year and month from a date string"
-        date = datetime.strptime(date, "%Y-%m-%d").date()
-        year = date.year
-        month = date.month
-        return f'year: {year}, month: {month}'
+    def date_split(date: str) -> str:
+        "Extracts the year and month from a date string in YYYY-MM-DD format"
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+            year = parsed_date.year
+            month = parsed_date.month
+            return f'year: {year}, month: {month}'
+        except ValueError:
+            return "Invalid date format. Please use YYYY-MM-DD."
 
     @tool("number_comparison-tool", args_schema=CalculatorInput)
-    def number_compare(num1: float, num2: float) -> bool:
+    def number_compare(num1: float, num2: float) -> str:
         "Determines if first number is less than the second number"
-        num1_less_num1 = num1 < num2
-        return num1_less_num1
+        result = num1 < num2
+        return f"Is {num1} less than {num2}? {result}"
 
-    tools = [multiply_tool, date_today, date_difference_tool, date_split, number_compare]
+    class DateFromTodayInput(BaseModel):
+        past_date: str = Field(description="A past date in YYYY-MM-DD format")
+        threshold_months: float = Field(description="Number of months to compare against")
+
+    @tool("months_since_date-tool", args_schema=DateFromTodayInput)
+    def months_since_date(past_date: str, threshold_months: float) -> str:
+        "Calculate months between a past date and today, and compare to threshold"
+        try:
+            today = datetime.today().date()
+            parsed_date = datetime.strptime(past_date, "%Y-%m-%d").date()
+            months_diff = (today.year - parsed_date.year) * 12 + today.month - parsed_date.month
+            is_within_threshold = months_diff < threshold_months
+            return f"Months since {past_date}: {months_diff}. Is within {threshold_months} months? {is_within_threshold}"
+        except ValueError:
+            return "Invalid date format. Please use YYYY-MM-DD."
+
+    tools = [multiply_tool, date_today, date_difference_tool, date_split, number_compare, months_since_date]
 
     tool_names=", ".join([tool.name for tool in tools])
 
@@ -648,6 +671,19 @@ def policy_tools(policy_qs: str, patient_profile: str, model_agent):
 
     Give a binary 'yes' or 'no' score in the response to indicate whether the patient is eligible according to the given policy ONLY.
     If the patient is not eligible then also include the reason in your response.
+
+    IMPORTANT TOOL USAGE RULES:
+    1. Use tools one at a time - DO NOT nest function calls
+    2. Wait for the result of one tool before calling another
+    3. If you need today's date, call date_today-tool first
+    4. If you need to calculate date differences, call the tools in sequence, not nested
+    5. Always use the actual returned values from tools, not the function calls themselves
+    6. For date comparisons, use months_since_date-tool which handles the complete calculation
+
+    EXAMPLE USAGE:
+    - To check if a patient had surgery within 12 months: use months_since_date-tool with the surgery date and 12
+    - To get today's date: use date_today-tool
+    - To compare numbers: use number_comparison-tool with actual numbers
 
     You have access to the following tools:
     {tool_names}
