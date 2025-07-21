@@ -183,8 +183,8 @@ class GradeHallucinations(BaseModel):
 def get_default_llm_managers():
     # You can customize these lists independently if needed
     model_list = [
-        # ("meta-llama/llama-4-maverick-17b-128e-instruct", "groq"),
-        # ("meta-llama/llama-4-scout-17b-16e-instruct", "groq"),
+        # ("meta-llama/llama-4-maverick-17b-128e-instruct", "groq"), # Slow
+        # ("meta-llama/llama-4-scout-17b-16e-instruct", "groq"), # Slow
         ("mistral-saba-24b", "groq"),
         # ("llama3-8b-8192", "groq"),
     ]

@@ -52,10 +52,10 @@ Your options:
    A - Continue with auto-generated profile rewriter --> Continue Evaluation,
    B - Manually modify the patient profile to better match trials.            
 """
-        elif last_node == 'policy_evaluator' and policy_eligible == False:
-            return 'Go to Policy Issue Tab - ATTENTION: Patient has policy conflicts that need review'
-        elif last_node == 'policy_evaluator' and policy_eligible == True:
-            return 'Agent continuing - Policy check passed, no action needed'
+        # elif last_node == 'policy_evaluator' and policy_eligible == False:
+            # return 'Go to Policy Issue Tab - ATTENTION: Patient has policy conflicts that need review'
+        # elif last_node == 'policy_evaluator' and policy_eligible == True:
+            # return 'Agent continuing - Policy check passed, no action needed'
         elif last_node == 'trial_search' and trials == []:
             # if nnode == 'profile_rewriter':
                 # return 'Profile - No potential trials found. \n Continue: Use profile rewriter or manually modify the patient profile.'
@@ -77,10 +77,10 @@ Your options:
             
             config = {
                 'patient_prompt': patient_prompt,
-                "max_revisions": 10,
+                "max_revisions": 3,
                 "revision_number": 0,
                 "trial_searches": 0,
-                "max_trial_searches": 3,
+                "max_trial_searches": 2,
                 'last_node': "",
                 'selected_model': selected_model}
             self.thread_id += 1  # new agent, new thread
@@ -101,8 +101,6 @@ Your options:
             trials_update = gr.update()
 
             # Update based on node
-            if last_node == "policy_search":
-                policies_update = self.get_current_policies()
             if last_node == "policy_evaluator":
                 policy_issue_update = self.get_last_policy_status()
             if last_node == "trial_search":
@@ -110,10 +108,9 @@ Your options:
             if last_node == "grade_trials":
                 trials_update = self.get_trials_summary_table()
 
-            # Only yield the 4 outputs expected by Gradio
+            # Only yield the 3 outputs expected by Gradio
             yield (
                 self.partial_message,  # live
-                policies_update,      # current_policies
                 policy_issue_update,  # policy_status
                 trials_update         # trials_summary (must be a DataFrame or gr.update())
             )
@@ -560,24 +557,21 @@ Your options:
         """Get the current policies from the agent state."""
         current_values = self.graph.get_state(self.thread)
         
-        if not current_values.values or "last_node" not in current_values.values:
+        if not current_values.values or "policies" not in current_values.values:
             return gr.update(
-                label="📜 Current Policies in Agent State",
+                label="📜 Policies Related to the Patient",
                 value="No policies loaded yet - Start evaluation to see policies"
             )
         
         # Check if we have policies in the state
-        if 'policies' in current_values.values and current_values.values['policies']:
+        if current_values.values['policies']:
             policies = current_values.values['policies']
             policies_text = "\n\n".join(f"**Policy {i+1}:**\n{doc.page_content}" for i, doc in enumerate(policies))
-            
-            # new_label = "📜 Policies Related to the Patient"
-            
             return gr.update(value=policies_text)
         else:
             return gr.update(
                 label="📜 Policies Related to the Patient",
-                value="No policies found in current state - Policy search may not be complete"
+                value="No policies found in current state"
             )
 
     def create_interface(self):
@@ -886,30 +880,28 @@ You can obtain more information about each trial's details and possible relevanc
                     return gr.update(visible=False)
                 
                 # Function to refresh all status components
-                def refresh_all_status():
+                def refresh_all_status(skip_policy_status_update=False):
                     """Refresh all the new status components."""
-                    # Check if patient profile exists and show help text if it does
                     current_values = self.graph.get_state(self.thread)
+                    last_node = current_values.values.get("last_node", "")
                     profile_ready = (current_values.values and 
                                    "patient_profile" in current_values.values and 
                                    current_values.values["patient_profile"] and 
                                    current_values.values["patient_profile"].strip())
-                    
-                    # Check if policy search has been completed
                     policy_search_done = (current_values.values and 
                                         "last_node" in current_values.values and 
                                         current_values.values["last_node"] in ["policy_search", "policy_evaluator", "trial_search", "grade_trials", "profile_rewriter"])
-                    
-                    # Check if policy conflict buttons should be shown (policy_evaluator with no next node)
                     policy_conflict_buttons_visible = (current_values.values and 
                                                      "last_node" in current_values.values and 
                                                      current_values.values["last_node"] == "policy_evaluator" and 
                                                      (current_values.next is None or len(current_values.next) == 0))
+                    # Show "Skip All Policies" button after policy search is done
+                    policy_big_skip_visible = policy_search_done
                     
                     return [
                         self.get_patient_profile_with_formatting(),  # current_profile - preserve multi-line formatting
-                        self.get_current_policies(),        # current_policies
-                        self.get_last_policy_status(),      # policy_status  
+                        self.get_current_policies(),        # current_policies - same as profile textbox behavior
+                        self.get_last_policy_status() if not skip_policy_status_update else gr.update(),      # policy_status  
                         self.get_trials_summary_table(),    # trials_summary
                         self.get_stages_history(),          # stages_history
                         gr.update(visible=profile_ready),   # profile_help - show only when profile is ready
@@ -917,7 +909,7 @@ You can obtain more information about each trial's details and possible relevanc
                         gr.update(visible=policy_search_done),  # policy_conflict_info - show only when policy search is done
                         gr.update(visible=True),            # policy_title - always visible
                         gr.update(visible=policy_conflict_buttons_visible),  # policy_skip_btn - show only when policy conflict detected
-                        gr.update(visible=policy_conflict_buttons_visible)   # policy_big_skip_btn - show only when policy conflict detected
+                        gr.update(visible=policy_big_skip_visible)   # policy_big_skip_btn - show after policy search is done
                     ]
                 
                 # Add progress bar
@@ -998,7 +990,7 @@ You can obtain more information about each trial's details and possible relevanc
                                 fn=refresh_all_status, inputs=None, outputs=status_components)
                 policy_big_skip_btn.click(fn=big_skip_policy_and_notify, inputs=None, outputs=policy_status).then(
                                 fn=updt_disp, inputs=None, outputs=sdisps).then(
-                                fn=refresh_all_status, inputs=None, outputs=status_components)
+                                fn=lambda: refresh_all_status(skip_policy_status_update=True), inputs=None, outputs=status_components)
                 
                 # sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,revision_bx,count_bx,step_pd,thread_pd]
                 thread_pd.input(self.switch_thread, [thread_pd], None).then(
@@ -1010,13 +1002,13 @@ You can obtain more information about each trial's details and possible relevanc
                 gen_btn.click(vary_btn,gr.Number("secondary", visible=False), gen_btn).then(
                               vary_btn,gr.Number("primary", visible=False), cont_btn).then(
                               fn=show_processing, inputs=None, outputs=processing_status).then(
-                              fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live, current_policies, policy_status, trials_summary],show_progress=True).then(
+                              fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live, trials_summary],show_progress=True).then(
                               fn=hide_processing, inputs=None, outputs=processing_status).then(
                               fn=updt_disp, inputs=None, outputs=sdisps).then(
                               fn=refresh_all_status, inputs=None, outputs=status_components)
                 cont_btn.click(fn=show_processing, inputs=None, outputs=processing_status).then(
                                fn=self.run_agent, inputs=[gr.Number(False, visible=False),prompt_bx,stop_after], 
-                               outputs=[live, current_policies, policy_status, trials_summary]).then(
+                               outputs=[live, policy_status, trials_summary]).then(
                                fn=hide_processing, inputs=None, outputs=processing_status).then(
                                fn=updt_disp, inputs=None, outputs=sdisps).then(
                                fn=refresh_all_status, inputs=None, outputs=status_components)
