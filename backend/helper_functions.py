@@ -129,6 +129,7 @@ import chromadb
 import json
 from langchain.chains.query_constructor.base import AttributeInfo
 from langchain.retrievers.self_query.base import SelfQueryRetriever
+from backend.my_agent.llm_manager import LLMManager
 
 class Patient_ID(BaseModel):
     """Model for extracting patient ID from user prompt."""
@@ -169,39 +170,37 @@ class GradeHallucinations(BaseModel):
     )
     Reason: str = Field(description="Reasons to the given relevance score.")
 
+# Helper to get default LLMManagers for completions and tool calls
+def get_default_llm_managers():
+    # You can customize these lists independently if needed
+    model_list = [
+        ("meta-llama/llama-4-maverick-17b-128e-instruct", "groq"),
+        ("meta-llama/llama-4-scout-17b-16e-instruct", "groq"),
+        ("mistral-saba-24b", "groq"),
+    ]
+    tool_model_list = [
+        ("llama-3.3-70b-versatile", "groq"),
+        ("llama3-70b-8192", "groq"),        
+        ("deepseek-r1-distill-llama-70b", "groq"),
+        ("moonshotai/kimi-k2-instruct", "groq"),
+        ("qwen/qwen3-32b", "groq"),
+        ("gemma2-9b-it", "groq"),
+        ("llama-3.1-8b-instant", "groq"),
+        ("llama3-8b-8192", "groq"),
+        # ("gpt-3.5-turbo", "openai"),
+    ]
+    return LLMManager(model_list), LLMManager(tool_model_list)
+
 class PatientCollectorConfig:
     """Configuration for patient collector node."""
-    def __init__(self, use_free_model=True, db_path="sql_server/patients.db", selected_model=None):
-        self.use_free_model = use_free_model
+    def __init__(self, llm_manager: LLMManager, llm_manager_tool: LLMManager = None, db_path="sql_server/patients.db"):
+        self.llm_manager = llm_manager
+        self.llm_manager_tool = llm_manager_tool or llm_manager
         self.db_path = db_path
-        
-        # Use selected model or default to best performing model
-        # if selected_model:
-        #     self.modelID_groq = selected_model
-        #     self.modelID_groq_tool = selected_model
-        # else:
-        #     self.modelID_groq = "llama-3.3-70b-versatile"  # Best default
-        #     self.modelID_groq_tool = "llama-3.3-70b-versatile"
-                
-        self.modelID_groq = "meta-llama/llama-4-scout-17b-16e-instruct"
-        self.modelID_groq_tool = "llama-3.1-8b-instant"        
-        # self.modelID_groq_tool = "llama-3.3-70b-versatile"
-
-
-        self.modelID = "gpt-3.5-turbo"
-        
-        # Initialize models
-        if use_free_model:
-            self.model = ChatGroq(model=self.modelID_groq, temperature=0)
-            self.model_tool = ChatGroq(model=self.modelID_groq_tool, temperature=0)
-            print(f"Using Groq models: generic:{self.modelID_groq} and tool use:{self.modelID_groq_tool}")
-        else:
-            self.model = ChatOpenAI(temperature=0.0, model=self.modelID)
-            print(f"Using OpenAI model: {self.modelID}")
-        
-        # Initialize chain for patient profile generation
+        self.model = llm_manager.current
+        self.model_tool = self.llm_manager_tool.current
         self._setup_profile_chain()
-    
+
     def _setup_profile_chain(self):
         """Setup the chain for patient profile generation."""
         parser = StrOutputParser()
@@ -433,9 +432,9 @@ def add_patient_data(patient_data: dict, db_path="../data/patients.db"):
 #         print(f"Using existing database at: {db_path}")
     
     # Create and return configuration
-    config = PatientCollectorConfig(use_free_model=use_free_model, db_path=db_path)
-    print("Patient collector system initialized successfully!")
-    return config
+    # config = PatientCollectorConfig(use_free_model=use_free_model, db_path=db_path)
+    # print("Patient collector system initialized successfully!")
+    # return config
 
 class AgentState(TypedDict):
     """State definition for the LLM Pharma workflow agent."""
@@ -561,14 +560,15 @@ def extract_error_message(e: Exception, context: str) -> str:
 #             return display_name
 #     return model_id  # Return the ID if not found
 
-def policy_tools(policy_qs: str, patient_profile: str, model_agent):
+def policy_tools(policy_qs: str, patient_profile: str, model_agent, llm_manager_tool):
     """
     Policy evaluation tools for clinical trial eligibility assessment.
     
     Args:
         policy_qs: Policy questions to evaluate
         patient_profile: Patient profile document
-        model_agent: LLM model for evaluation
+        model_agent: LLM model for evaluation (not used directly anymore)
+        llm_manager_tool: LLM manager for tool calls with fallback
         
     Returns:
         str: Evaluation result
@@ -640,15 +640,18 @@ Available tools: {tool_names}
     
     # Use simpler message format that works better with Groq
     try:
-        react_agent = create_react_agent(model_agent, tools, debug=False)
-        response = react_agent.invoke({
-            "messages": [
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_message_content}
-            ]
-        })
-        result = response["messages"][-1].content
-        return result
+        def run_react_agent():
+            # Create the react_agent inside the runnable using the current model
+            current_model = llm_manager_tool.current
+            react_agent = create_react_agent(current_model, tools, debug=False)
+            return react_agent.invoke({
+                "messages": [
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message_content}
+                ]
+            })
+        result = llm_manager_tool.invoke_with_fallback(run_react_agent)
+        return result["messages"][-1].content
     except Exception as e:
         print(f"Error in policy_tools: {e}")
         # Fallback: evaluate without tools
@@ -663,7 +666,9 @@ Available tools: {tool_names}
         """
         
         try:
-            response = model_agent.invoke([{"role": "user", "content": fallback_prompt}])
+            # Use the current model from the manager for fallback too
+            current_model = llm_manager_tool.current
+            response = current_model.invoke([{"role": "user", "content": fallback_prompt}])
             return response.content
         except Exception as fallback_error:
             print(f"Fallback also failed: {fallback_error}")
@@ -753,43 +758,55 @@ def setup_sqlite_memory() -> SqliteSaver:
 
 
 # Placeholder node functions (to be implemented with actual logic)
+# --- Update all node functions to use both managers ---
 def patient_collector_node(state: AgentState) -> dict:
     """
     Patient collector node that extracts patient ID from prompt, fetches patient data,
     and generates patient profile.
-    
-    Args:
-        state: Current agent state
-        
-    Returns:
-        Updated state with patient data and profile
     """
     try:
-        # Get selected model from state
-        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
-        
-        # Create configuration for this node
-        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
-        
-        patient_data_prompt = """You are a helpful assistance in extracting patient's medical history.
-Based on the following request identify and return the patient's ID number.
-"""
+        llm_manager, llm_manager_tool = get_default_llm_managers()
+        config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
 
-        response = config.model_tool.with_structured_output(Patient_ID).invoke([
-            SystemMessage(content=patient_data_prompt),
-            HumanMessage(content=state['patient_prompt'])
-        ])
+        patient_data_prompt = """You are a helpful assistance in extracting patient's medical history.\nBased on the following request identify and return the patient's ID number.\n"""
+
+        def run_id_extraction():
+            # Use current model from manager, not captured config.model_tool
+            current_model = llm_manager_tool.current
+            return current_model.with_structured_output(Patient_ID).invoke([
+                SystemMessage(content=patient_data_prompt),
+                HumanMessage(content=state['patient_prompt'])
+            ])
+        response = llm_manager_tool.invoke_with_fallback(run_id_extraction)
         patient_id = response.patient_id
         print(f"Patient ID: {patient_id}")
-        
+
         patient_data = get_patient_data(patient_id, config.db_path)
         print(patient_data)
-        
-        if patient_data is not None:        
+
+        if patient_data is not None:
             if patient_data.get('name'):
                 del patient_data['patient_id']
                 del patient_data['name']
-            patient_profile = config.chain_profile.invoke({'patient_data': patient_data})
+            def run_profile_chain():
+                # Recreate the chain with current model from manager
+                current_model = llm_manager.current
+                parser = StrOutputParser()
+                prompt_profile = PromptTemplate(
+                    template="""
+                    You are the Clinical Research Coordinator in the screening phase of a clinical trial. 
+                    Use the following patient data to write the patient profile for the screening phase.
+                    The patient profile is a summary of the patient's information in continuous text form.    
+                    If they had no previous trial participation, exclude trial status and trial completion date.\n
+                    Do not ignore any available information.\n 
+                    Also suggest medical trials that can be related to patient's disease history.\n    
+                    Write the patient profile in 3 to 4 short sentences.\n\n
+                    {patient_data}""",
+                    input_variables=["patient_data"],
+                )
+                profile_chain = prompt_profile | current_model | parser
+                return profile_chain.invoke({'patient_data': patient_data})
+            patient_profile = llm_manager.invoke_with_fallback(run_profile_chain)
         else:
             patient_profile = ""
             print(f"No patient found with ID: {patient_id}")
@@ -802,11 +819,11 @@ Based on the following request identify and return the patient's ID number.
             "revision_number": state.get("revision_number", 0) + 1,
             "policy_eligible": False  # Initialize this key to prevent KeyError
         }
-        
+
     except Exception as e:
         print(f"❌ Error in patient collection: {e}")
         error_message = extract_error_message(e, "patient collection")
-        
+
         return {
             "last_node": "patient_collector",
             "patient_data": {},
@@ -1058,6 +1075,8 @@ def policy_search_node(state: AgentState) -> dict:
         Updated state with retrieved policies
     """
     try:
+        llm_manager, llm_manager_tool = get_default_llm_managers()
+        config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
         # Get patient profile from state
         patient_profile = state.get("patient_profile", "")
         
@@ -1101,18 +1120,11 @@ def policy_search_node(state: AgentState) -> dict:
             "error_message": error_message
         }
 
+# --- Fix policy_evaluator_node ---
 def policy_evaluator_node(state: AgentState) -> dict:
-    """
-    Policy evaluator node that evaluates patient eligibility against institutional policies.
-    
-    Args:
-        state: Current agent state containing patient profile and policies
-        
-    Returns:
-        Updated state with policy evaluation results
-    """
     try:
-        # Check if there are unchecked policies
+        llm_manager, llm_manager_tool = get_default_llm_managers()
+        config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
         unchecked_policies = state.get("unchecked_policies", [])
         if not unchecked_policies:
             print("⚠️ No unchecked policies available for evaluation")
@@ -1124,15 +1136,11 @@ def policy_evaluator_node(state: AgentState) -> dict:
                 'checked_policy': None,
                 'policy_qs': ""
             }
-        
-        # Get the first unchecked policy
         policy_doc = unchecked_policies[0]
         policy_header = policy_doc.page_content.split('\n', 2)[1] if len(policy_doc.page_content.split('\n')) > 1 else "Policy"
         print(f'Evaluating Policy:\n {policy_header}')
-        
         policy = policy_doc.page_content
         patient_profile = state.get("patient_profile", "")
-        
         if not patient_profile:
             print("⚠️ No patient profile available for policy evaluation")
             return {
@@ -1144,50 +1152,42 @@ def policy_evaluator_node(state: AgentState) -> dict:
                 'policy_qs': ""
             }
         
-        # Get selected model from state
-        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
-        
-        # Create configuration for this node
-        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
-        
-        # Create policy questions prompt
-        prompt_rps = PromptTemplate(
-            template=""" You are a Principal Investigator (PI) for clinical trials. 
-                The following document contains a policy document about participation in clinical trials:
-                \n\n{policy}\n\n
+        def run_policy_qs():
+            # Recreate the chain with current model
+            current_model = llm_manager.current
+            prompt_rps = PromptTemplate(
+                template=""" You are a Principal Investigator (PI) for clinical trials. 
+                    The following document contains a policy document about participation in clinical trials:\n\n{policy}\n\n
+                    Your task is to rephrase each single policy from the document above into a single yes/no question. 
+                    Form each question so that a yes answer indicates the patient's ineligibility.
+                    Do not create more questions than given number of policies.
 
-                Your task is to rephrase each single policy from the document above into a single yes/no question. 
-                Form each question so that a yes answer indicates the patient's ineligibility.
-                Do not create more questions than given number of policies.
+                    Example: Patients who have had accidents in the past 10 months are not eligible
+                    rephrased: Did patient have an accident in the past 10 months?
 
-                Example: Patients who have had accidents in the past 10 months are not eligible
-                rephrased: Did patient have an accident in the past 10 months?
-
-                Example: Patients with active tuberculosis, hepatitis B or C, or HIV are excluded unless the trial is specifically designed for these conditions.
-                rephrased: Did patient have active tuberculosis, hepatitis B or C, or HIV?
-                """,
-            input_variables=["policy"],
-        )
-        
-        # Create policy questions chain
-        policy_rps_chain = prompt_rps | config.model | StrOutputParser()
-        
-        # Generate policy questions
-        policy_qs = policy_rps_chain.invoke({"policy": policy})
+                    Example: Patients with active tuberculosis, hepatitis B or C, or HIV are excluded unless the trial is specifically designed for these conditions.
+                    rephrased: Did patient have active tuberculosis, hepatitis B or C, or HIV?
+                    """,
+                input_variables=["policy"],
+            )
+            policy_rps_chain = prompt_rps | current_model | StrOutputParser()
+            return policy_rps_chain.invoke({"policy": policy})
+        policy_qs = llm_manager.invoke_with_fallback(run_policy_qs)
         print(f"✅ Generated policy questions: {policy_qs}")
         
-        # Evaluate policy using tools
-        result = policy_tools(policy_qs, patient_profile, config.model_tool)
+        def run_policy_tools():
+            return policy_tools(policy_qs, patient_profile, config.model_tool, llm_manager_tool)
+        result = llm_manager_tool.invoke_with_fallback(run_policy_tools)
         print(f"✅ Policy evaluation result: {result}")
         
-        # Parse the evaluation result using structured output
-        llm_with_tools = config.model_tool.bind_tools([eligibility])
-        message = f"""Evaluation of the patient's eligibility:
-        {result}\n\n
-        Is the patient eligible according to this policy?"""
-        response = llm_with_tools.invoke(message)
+        message = f"""Evaluation of the patient's eligibility:\n{result}\n\nIs the patient eligible according to this policy?"""
+        def run_eligibility():
+            # Use current model from manager for structured output
+            current_model = llm_manager_tool.current
+            llm_with_tools = current_model.bind_tools([eligibility])
+            return llm_with_tools.invoke(message)
+        response = llm_manager_tool.invoke_with_fallback(run_eligibility)
         
-        # Extract eligibility from tool calls
         if response.tool_calls and len(response.tool_calls) > 0:
             tool_call = response.tool_calls[0]
             if 'args' in tool_call:
@@ -1199,11 +1199,8 @@ def policy_evaluator_node(state: AgentState) -> dict:
         else:
             policy_eligible = 'no'
             rejection_reason = 'No evaluation result available'
-        
-        # Update state
-        unchecked_policies.pop(0)  # Remove the evaluated policy
+        unchecked_policies.pop(0)
         print(f"Remaining unchecked policies: {len(unchecked_policies)}")
-        
         return {
             "last_node": "policy_evaluator",
             "policy_eligible": policy_eligible.lower() == 'yes',
@@ -1213,11 +1210,9 @@ def policy_evaluator_node(state: AgentState) -> dict:
             'policy_qs': policy_qs,
             'unchecked_policies': unchecked_policies
         }
-        
     except Exception as e:
         print(f"❌ Error in policy evaluation: {e}")
         error_message = extract_error_message(e, "policy evaluation")
-        
         return {
             "last_node": "policy_evaluator",
             "policy_eligible": False,
@@ -1228,21 +1223,12 @@ def policy_evaluator_node(state: AgentState) -> dict:
             "error_message": error_message
         }
 
+# --- Fix trial_search_node ---
 def trial_search_node(state: AgentState) -> dict:
-    """
-    Trial search node that searches the trial database to retrieve clinical trials 
-    that match the patient's medical history using a self-query retriever.
-    
-    Args:
-        state: Current agent state containing patient profile
-        
-    Returns:
-        Updated state with retrieved trials
-    """
     try:
-        # Get patient profile from state
+        llm_manager, llm_manager_tool = get_default_llm_managers()
+        config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
         patient_profile = state.get("patient_profile", "")
-        
         if not patient_profile:
             print("⚠️ No patient profile available for trial search")
             return {
@@ -1251,14 +1237,6 @@ def trial_search_node(state: AgentState) -> dict:
                 'trial_searches': state.get('trial_searches', 0) + 1,
                 "policy_eligible": state.get("policy_eligible", False)
             }
-        
-        # Get selected model from state
-        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
-        
-        # Create configuration for this node
-        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
-        
-        # Create or load trial vector store
         trial_vectorstore = create_trial_vectorstore()
         print(f"Number of trials in the vector store: {trial_vectorstore._collection.count()}")
         
@@ -1266,7 +1244,6 @@ def trial_search_node(state: AgentState) -> dict:
             AttributeInfo(
                 name="disease_category",
                 description="Defines the disease group of patients related to this trial. One of ['cancer', 'leukemia', 'mental_health']",
-                # description="The trial is for patients when their disease is related to this category. One of ['cancer', 'leukemia', 'mental_health']",
                 type="string",
             ),
             AttributeInfo(
@@ -1275,41 +1252,35 @@ def trial_search_node(state: AgentState) -> dict:
                 type="str",
             ),    
         ]
-
         document_content_description = "The list of patient conditions to include or exclude them from the trial"
-        retriever_trial_sq = SelfQueryRetriever.from_llm(
-            config.model,
-            trial_vectorstore,
-            # vectorstore_trials_mpnet,
-            document_content_description,
-            metadata_field_info
-            # enable_limit=True
-        )
+        
         print(f"patient_profile: {patient_profile}")
-        # Create search question
         question = f"""
         Which trials are relevant to the patient with the following medical history?\n
         patient_profile: {patient_profile}
         """
-        
-        # Retrieve relevant trials
-        docs_retrieved = retriever_trial_sq.get_relevant_documents(question)
+        def run_trial_retrieval():
+            # Create retriever with current model from manager
+            current_model = llm_manager.current
+            retriever_trial_sq = SelfQueryRetriever.from_llm(
+                current_model,
+                trial_vectorstore,
+                document_content_description,
+                metadata_field_info
+            )
+            return retriever_trial_sq.get_relevant_documents(question)
+        docs_retrieved = llm_manager.invoke_with_fallback(run_trial_retrieval)
         print(f"✅ Retrieved {len(docs_retrieved)} relevant trials")
-        
-        # Update trial searches counter
         trial_searches = state.get('trial_searches', 0) + 1
-        
         return {
             'last_node': 'trial_search',
             'trials': docs_retrieved,
             'trial_searches': trial_searches,
             "policy_eligible": state.get("policy_eligible", False)
         }
-        
     except Exception as e:
         print(f"❌ Error in trial search: {e}")
         error_message = extract_error_message(e, "trial search")
-        
         return {
             'last_node': 'trial_search',
             'trials': [],
@@ -1318,23 +1289,13 @@ def trial_search_node(state: AgentState) -> dict:
             "error_message": error_message
         }
 
+# --- Fix grade_trials_node ---
 def grade_trials_node(state: AgentState) -> dict:
-    """
-    Trial grading node that evaluates the relevance of retrieved trials to the patient profile.
-    
-    Args:
-        state: Current agent state containing trials and patient profile
-        
-    Returns:
-        Updated state with graded trials
-    """
     try:
         print("----- CHECKING THE TRIALS RELEVANCE TO PATIENT PROFILE ----- ")
-        
         trial_found = False
         trials = state.get('trials', [])
         patient_profile = state.get('patient_profile', '')
-        
         if not trials:
             print("⚠️ No trials available for grading")
             return {
@@ -1342,7 +1303,6 @@ def grade_trials_node(state: AgentState) -> dict:
                 "relevant_trials": [],
                 "policy_eligible": state.get("policy_eligible", False)
             }
-        
         if not patient_profile:
             print("⚠️ No patient profile available for trial grading")
             return {
@@ -1350,114 +1310,92 @@ def grade_trials_node(state: AgentState) -> dict:
                 "relevant_trials": [],
                 "policy_eligible": state.get("policy_eligible", False)
             }
+        llm_manager, llm_manager_tool = get_default_llm_managers()
+        config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
         
-        # Get selected model from state
-        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
-        
-        # Create configuration for this node
-        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
-        
-        # Create prompt for trial grading
-        prompt_grader = PromptTemplate(
-            template=""" 
-            You are a Principal Investigator (PI) for evaluating patients for clinical trials.\n
-            Your task is to evaluate the relevance of a clinical trial to the given patient's medical profile. \n
-            
-            
-            The clinical trial is related to these diseases: {trial_diseases} \n
-            Here are the inclusion and exclusion criteria of the trial: \n\n {document} \n\n
-            
-            ===============                
-            Use the following steps to determine relevance and provide the necessary fields in your response: \n
-            1- If the patient's profile meets any exclusion criteria, then the trial is not relevant --> relevance_score = 'No'. \n
-            2- If the patient has or had the trial's inclusion diseases, then it is relevant --> relevance_score = 'Yes'.\n        
-            3- If the patient did not have the trial's inclusion diseases, then it is not relevant --> relevance_score = 'No'.\n
-                           
-            Example 1: 
-    The patient has Arthritis and the trial is related to pancreatic cancer. --> relevance_score = 'No' \n
-            
-            Example 2: 
-    The patient has pancreatic cancer and the trial is also related to carcinoma pancreatic cancer. --> relevance_score = 'Yes' \n
-
-            Example 3: 
-    The patient has pancreatic cancer and the trial is related to breast cancer or ovarian cancer. --> relevance_score = 'No'. \n 
-
-            Bring your justification in the explanation. \n
-
-            Mention further information that is needed from the patient's medical history related to the trial's criteria \n
-
-            ===============
-            Here is the patient's medical profile: {patient_profile} \n\n
-            """,
-            input_variables=["document", "patient_profile", "trial_diseases"],
-        )
-        
-        # Create hallucination detection prompt
-        system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n 
-             Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
-        hallucination_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system),
-                ("human", "Patient's medical profile: \n\n {patient_profile} \n\n LLM generation: {explanation}"),
-            ]
-        )
-        
-        # Create chains
-        llm_with_tool = config.model_tool.with_structured_output(grade)
-        retrieval_grader = prompt_grader | llm_with_tool
-        
-        llm_with_tool_hallucination = config.model_tool.with_structured_output(GradeHallucinations)
-        hallucination_grader = hallucination_prompt | llm_with_tool_hallucination
-        
-        # Score each trial
         relevant_trials = []
         for trial in trials:
             doc_txt = trial.page_content
             trial_diseases = trial.metadata['diseases']
             nctid = trial.metadata['nctid']
-            print(f"---GRADER: TRIAL {nctid}: ---") 
+            print(f"---GRADER: TRIAL {nctid}: ---")
             
-            trial_score = retrieval_grader.invoke(
-                {
+            def run_trial_score():
+                # Create grader with current model
+                current_model = llm_manager_tool.current
+                prompt_grader = PromptTemplate(
+                    template=""" 
+                    You are a Principal Investigator (PI) for evaluating patients for clinical trials.\n
+                    Your task is to evaluate the relevance of a clinical trial to the given patient's medical profile. \n
+                    The clinical trial is related to these diseases: {trial_diseases} \n
+                    Here are the inclusion and exclusion criteria of the trial: \n\n {document} \n\n
+                    ===============                
+                    Use the following steps to determine relevance and provide the necessary fields in your response: \n
+                    1- If the patient's profile meets any exclusion criteria, then the trial is not relevant --> relevance_score = 'No'. \n
+                    2- If the patient has or had the trial's inclusion diseases, then it is relevant --> relevance_score = 'Yes'.\n        
+                    3- If the patient did not have the trial's inclusion diseases, then it is not relevant --> relevance_score = 'No'.\n
+                    Example 1: 
+            The patient has Arthritis and the trial is related to pancreatic cancer. --> relevance_score = 'No' \n
+                    Example 2: 
+            The patient has pancreatic cancer and the trial is also related to carcinoma pancreatic cancer. --> relevance_score = 'Yes' \n
+                    Example 3: 
+            The patient has pancreatic cancer and the trial is related to breast cancer or ovarian cancer. --> relevance_score = 'No'. \n 
+                    Bring your justification in the explanation. \n
+                    Mention further information that is needed from the patient's medical history related to the trial's criteria \n
+                    ===============
+                    Here is the patient's medical profile: {patient_profile} \n\n
+                    """,
+                    input_variables=["document", "patient_profile", "trial_diseases"],
+                )
+                llm_with_tool = current_model.with_structured_output(grade)
+                retrieval_grader = prompt_grader | llm_with_tool
+                return retrieval_grader.invoke({
                     "patient_profile": patient_profile, 
                     "document": doc_txt, 
                     "trial_diseases": trial_diseases
-                }
-            )
-                
+                })
+            trial_score = llm_manager_tool.invoke_with_fallback(run_trial_score)
             relevance_score = trial_score.relevance_score
             trial_score_dic = dict(trial_score)
-            trial_score_dic['nctid'] = nctid                    
-
-            if relevance_score.lower() == "yes":   
-                # Hallucination check         
-                explanation = trial_score.explanation            
-                factual_score = hallucination_grader.invoke({"patient_profile": patient_profile, "explanation": explanation})
-                factual_score_grade = factual_score.binary_score            
+            trial_score_dic['nctid'] = nctid
+            
+            if relevance_score.lower() == "yes":
+                explanation = trial_score.explanation
+                def run_hallucination():
+                    # Create hallucination grader with current model
+                    current_model = llm_manager_tool.current
+                    system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n 
+                         Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
+                    hallucination_prompt = ChatPromptTemplate.from_messages(
+                        [
+                            ("system", system),
+                            ("human", "Patient's medical profile: \n\n {patient_profile} \n\n LLM generation: {explanation}"),
+                        ]
+                    )
+                    llm_with_tool_hallucination = current_model.with_structured_output(GradeHallucinations)
+                    hallucination_grader = hallucination_prompt | llm_with_tool_hallucination
+                    return hallucination_grader.invoke({"patient_profile": patient_profile, "explanation": explanation})
+                factual_score = llm_manager_tool.invoke_with_fallback(run_hallucination)
+                factual_score_grade = factual_score.binary_score
                 if factual_score_grade == "no":
                     print("--- HALLUCINATION: MODEL'S EXPLANATION IS NOT GROUNDED IN PATIENT PROFILE --> REJECTED---")
                     trial_score_dic['relevance_score'] = 'no'
                     trial_score_dic['explanation'] = "Agent's Hallucination"
-
-            if relevance_score.lower() == "yes" and factual_score_grade == "yes":
-                print(f"---TRIAL RELEVANT---")  
+            if relevance_score.lower() == "yes" and trial_score_dic.get('relevance_score', '').lower() == "yes":
+                print(f"---TRIAL RELEVANT---")
                 trial_found = True
             else:
                 print(f"--- TRIAL NOT RELEVANT---")
-
             relevant_trials.append(trial_score_dic)
-            
         return {
             'last_node': 'grade_trials',
             "relevant_trials": relevant_trials,
             "policy_eligible": state.get("policy_eligible", False),
             "trial_found": trial_found
         }
-        
     except Exception as e:
         print(f"❌ Error in trial grading: {e}")
         error_message = extract_error_message(e, "trial grading")
-        
         return {
             'last_node': 'grade_trials',
             "relevant_trials": [],
@@ -1465,20 +1403,12 @@ def grade_trials_node(state: AgentState) -> dict:
             "error_message": error_message
         }
 
+# --- Fix profile_rewriter_node ---
 def profile_rewriter_node(state: AgentState) -> dict:
-    """
-    Profile rewriter node that rewrites patient profile when no relevant trials are found.
-    
-    Args:
-        state: Current agent state containing patient data
-        
-    Returns:
-        Updated state with rewritten patient profile
-    """
     try:
-        # Get patient data from state
+        llm_manager, llm_manager_tool = get_default_llm_managers()
+        config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
         patient_data = state.get("patient_data", {})
-        
         if not patient_data:
             print("⚠️ No patient data available for profile rewriting")
             return {
@@ -1487,14 +1417,10 @@ def profile_rewriter_node(state: AgentState) -> dict:
                 "policy_eligible": state.get("policy_eligible", False)
             }
         
-        # Get selected model from state
-        selected_model = state.get("selected_model", "llama-3.3-70b-versatile")
-        
-        # Create configuration for this node
-        config = PatientCollectorConfig(use_free_model=True, selected_model=selected_model)
-        
-        # Create system prompt for profile rewriting
-        system = """
+        def run_profile_rewrite():
+            # Create rewriter chain with current model
+            current_model = llm_manager.current
+            system = """
 A trial cross match resulted in no trials for the patient.
 As a clinical specialist write a medical profile for this patient and see if their disease(s) can be relevant to any of these categories of mental_health, cancer, or leukemia.
 If yes, then suggest relevant medical trial categories for the agent.
@@ -1513,37 +1439,27 @@ The patient is a X-year-old with a medical history of Y. They have participated 
 Suggested relevant trials:
 category X: [patient's disease] can be related to X due to Y.
 """
-        
-        # Create profile rewriter prompt
-        re_write_prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system),
-                (
-                    "human",
-                    "Here is a patient data:\n\n {patient_data} \n write a patient profile.",
-                ),
-            ]
-        )
-        
-        # Create profile rewriter chain
-        profile_rewriter_chain = re_write_prompt | config.model | StrOutputParser()
-        
-        # Generate rewritten patient profile
-        patient_profile_rewritten = profile_rewriter_chain.invoke({"patient_data": patient_data})
-        
-        # Print in capitals
+            re_write_prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", system),
+                    (
+                        "human",
+                        "Here is a patient data:\n\n {patient_data} \n write a patient profile.",
+                    ),
+                ]
+            )
+            profile_rewriter_chain = re_write_prompt | current_model | StrOutputParser()
+            return profile_rewriter_chain.invoke({"patient_data": patient_data})
+        patient_profile_rewritten = llm_manager.invoke_with_fallback(run_profile_rewrite)
         print("--- PROFILE REWRITER: PATIENT'S PROFILE REWRITTEN ---")
-        
         return {
             'last_node': 'profile_rewriter',
             'patient_profile': patient_profile_rewritten,
             "policy_eligible": state.get("policy_eligible", False)
         }
-        
     except Exception as e:
         print(f"❌ Error in profile rewriting: {e}")
         error_message = extract_error_message(e, "profile rewriting")
-        
         return {
             'last_node': 'profile_rewriter',
             'patient_profile': state.get("patient_profile", ""),
