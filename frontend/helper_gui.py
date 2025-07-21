@@ -36,8 +36,8 @@ class trials_gui( ):
         # Map nodes to appropriate tab notifications
         node_to_tab = {
             'patient_collector': 'Check Patient Profile - Patient profile has been created',
-            'policy_search': 'Check Policies - Relevant policies have been retrieved', 
-            'policy_evaluator': 'Check Policy Issue - Policy evaluation completed',
+            'policy_search': 'Check Policy Conflict - Relevant Clinical Policies have been retrieved', 
+            'policy_evaluator': 'Check Policy Conflict - In case of policy conflict, your action is needed',
             'trial_search': 'Check Potential Trials - Potentially relevant clinical trials have been found',
             'grade_trials': 'Check Trials Scores - Calculated Trial Relevance scores are ready',            
             'profile_rewriter': 'Go to Profile Tab - Patient profile has been updated'
@@ -49,8 +49,8 @@ class trials_gui( ):
         elif last_node == 'grade_trials':
             return """⚠️ Trials Scores - No matched trials found. Please review the relevance scores for more details.
 Your options:            
-   A - Continue with auto-generated profile rewriter,
-   B - Profile Tab - Manually modify the patient profile.            
+   A - Continue with auto-generated profile rewriter --> Continue Evaluation,
+   B - Manually modify the patient profile to better match trials.            
 """
         elif last_node == 'policy_evaluator' and policy_eligible == False:
             return 'Go to Policy Issue Tab - ATTENTION: Patient has policy conflicts that need review'
@@ -735,7 +735,7 @@ Your options:
                         # )
                     tab_notification = gr.Textbox(
                         value="Ready to start agent evaluation",
-                        label="🔔 Your Next Action 🔔",
+                        label="🔔 Your Notification Center 🔔",
                         lines=4,
                         interactive=False,
                         visible=True,
@@ -768,9 +768,9 @@ Your options:
                     checks_values = checks.copy()
                     # Fix: remove() only takes one argument at a time and 'policy_searcj' is a typo.
                     # Should remove '__start__' and 'policy_search' if present.
-                    for node in ['__start__', 'policy_search', 'policy_evaluator', 'grade_trials', 'trial_search']:
-                        if node in checks:
-                            checks_values.remove(node)
+                    # for node in ['__start__', 'policy_search', 'policy_evaluator', 'grade_trials', 'trial_search']:
+                    #     if node in checks:
+                    #         checks_values.remove(node)
                     stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks_values, scale=0, min_width=400)
                     with gr.Row():
                         thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0, visible=False)
