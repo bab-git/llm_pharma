@@ -174,7 +174,8 @@ class PatientCollectorConfig:
     def __init__(self, use_free_model=True, db_path="sql_server/patients.db"):
         self.use_free_model = use_free_model
         self.db_path = db_path
-        self.modelID_groq = "gemma2-9b-it"
+        # self.modelID_groq = "gemma2-9b-it"
+        self.modelID_groq = "llama3-8b-8192"
         # self.modelID_groq = "llama-3.3-70b-versatile"
         self.modelID = "gpt-3.5-turbo"
         

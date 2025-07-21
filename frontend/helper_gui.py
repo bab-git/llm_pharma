@@ -114,7 +114,15 @@ Your options:
             new_label = f"last_node: {last_node}, thread_id: {self.thread_id}, rev: {rev}, step: {astep}"
             return gr.update(label=new_label, value=current_values.values[key])
         else:
-            return ""  
+            return ""
+    
+    def get_state_value_only(self,key):
+        """Get state value without changing the label - for components that should keep their original labels."""
+        current_values = self.graph.get_state(self.thread)
+        if key in current_values.values:
+            return gr.update(value=current_values.values[key])
+        else:
+            return gr.update(value="")  
     
     def get_content(self, key):
         current_values = self.graph.get_state(self.thread)
@@ -344,9 +352,160 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
         print(current_state.next)
         return
 
+    def get_trials_summary_table(self):
+        """Get a summary table of trials with only nctid, diseases, and relevance columns."""
+        current_values = self.graph.get_state(self.thread)
+        
+        # Check if the state has been initialized
+        if not current_values.values or "last_node" not in current_values.values:
+            return pd.DataFrame({
+                'nctid': ['No data available'],
+                'diseases': ['Start evaluation to see results'], 
+                'relevance': ['Click "Start Evaluation" in the Agent tab']
+            })
+        
+        # Check if we have relevant trials data (after grade_trials)
+        if 'relevant_trials' in current_values.values and current_values.values['relevant_trials']:
+            relevant_trials = current_values.values['relevant_trials']
+            trials_data = []
+            
+            for trial in relevant_trials:
+                nctid = trial.get('nctid', 'Unknown')
+                # Get diseases from the original trials data if available
+                diseases = 'Unknown'
+                if 'trials' in current_values.values:
+                    for orig_trial in current_values.values['trials']:
+                        if orig_trial.metadata.get('nctid') == nctid:
+                            diseases = orig_trial.metadata.get('diseases', 'Unknown')
+                            break
+                
+                relevance = trial.get('relevance_score', 'Unknown')
+                trials_data.append({
+                    'nctid': nctid,
+                    'diseases': diseases,
+                    'relevance': relevance
+                })
+            
+            return pd.DataFrame(trials_data)
+        
+        # If no relevant trials yet, check if we have basic trials data
+        elif 'trials' in current_values.values and current_values.values['trials']:
+            trials = current_values.values['trials']
+            trials_data = []
+            
+            for trial in trials:
+                nctid = trial.metadata.get('nctid', 'Unknown')
+                diseases = trial.metadata.get('diseases', 'Unknown')
+                trials_data.append({
+                    'nctid': nctid,
+                    'diseases': diseases,
+                    'relevance': 'Not graded yet'
+                })
+            
+            return pd.DataFrame(trials_data)
+        
+        else:
+            return pd.DataFrame({
+                'nctid': ['No trials found yet'],
+                'diseases': ['Complete policy evaluation first'],
+                'relevance': ['Trials will be searched after policy check']
+            })
+
+    def get_last_policy_status(self):
+        """Get the status of the last checked policy."""
+        current_values = self.graph.get_state(self.thread)
+        
+        if not current_values.values or "last_node" not in current_values.values:
+            return gr.update(
+                label="Policy Status",
+                value="No policy evaluation started yet"
+            )
+        
+        last_node = current_values.values.get("last_node", "")
+        policy_status = "No policy checked yet"
+        
+        if "checked_policy" in current_values.values and current_values.values["checked_policy"]:
+            checked_policy = current_values.values["checked_policy"]
+            policy_eligible = current_values.values.get("policy_eligible", None)
+            rejection_reason = current_values.values.get("rejection_reason", "")
+            
+            # Get policy title/header
+            policy_content = checked_policy.page_content
+            policy_header = policy_content.split('\n')[0] if policy_content else "Policy"
+            
+            if policy_eligible is True:
+                status_icon = "✅"
+                status_text = "PASSED"
+            elif policy_eligible is False:
+                status_icon = "❌"
+                status_text = "FAILED"
+                if rejection_reason and rejection_reason != "N/A":
+                    status_text += f" - {rejection_reason}"
+            else:
+                status_icon = "❓"
+                status_text = "UNKNOWN"
+            
+            policy_status = f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
+        
+        last_node, nnode, thread_id, rev, astep = self.get_disp_state()
+        new_label = f"Policy Status (last_node: {last_node}, rev: {rev})"
+        
+        return gr.update(label=new_label, value=policy_status)
+
+    def get_stages_history(self):
+        """Get the history of stages/nodes that have been executed."""
+        stages_list = []
+        
+        try:
+            # Get state history in reverse order (latest first)
+            for state in self.graph.get_state_history(self.thread):
+                if state.metadata.get('step', 0) < 1:  # Skip early states
+                    continue
+                
+                last_node = state.values.get('last_node', 'unknown')
+                revision_number = state.values.get('revision_number', 0)
+                thread_ts = state.config['configurable'].get('thread_ts', 'unknown')
+                
+                # Create a stage entry
+                stage_entry = f"Step {revision_number}: {last_node} (ts: {thread_ts[-8:]})"
+                stages_list.append(stage_entry)
+            
+            # Reverse to show chronological order (oldest first)
+            stages_list.reverse()
+            
+            if not stages_list:
+                return gr.update(
+                    label="Stages History",
+                    value="No stages executed yet - Start evaluation to see progress"
+                )
+            
+            stages_text = "\n".join(stages_list)
+            last_node, nnode, thread_id, rev, astep = self.get_disp_state()
+            new_label = f"Stages History (Thread: {thread_id}, Current: {last_node})"
+            
+            return gr.update(label=new_label, value=stages_text)
+            
+        except Exception as e:
+            return gr.update(
+                label="Stages History (Error)",
+                value=f"Error retrieving stages: {str(e)}"
+            )
 
     def create_interface(self):
-        with gr.Blocks(theme=gr.themes.Default(spacing_size='sm',text_size="sm")) as demo:
+        with gr.Blocks(
+            theme=gr.themes.Default(spacing_size='sm',text_size="sm"),
+            css="""
+            .main-container {
+                max-width: 1200px !important;
+                margin: 0 auto !important;
+                padding: 20px !important;
+            }
+            .gradio-container {
+                max-width: 1200px !important;
+                margin: 0 auto !important;
+            }
+            """
+        ) as demo:
             
             # Add app description at the very top, before any tabs
             app_description = gr.Markdown(
@@ -405,11 +564,11 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                     return {
                         prompt_bx : current_state.values["patient_prompt"],
                         tab_notification: gr.update(value=notification, visible=True),
-                        last_node : current_state.values["last_node"],
+                        last_node : current_state.values["last_node"].replace("_", " ").title() if current_state.values["last_node"] else "",
                         count_bx : current_state.values["revision_number"],
                         search_bx : current_state.values["trial_searches"],
                         # revision_bx : current_state.values["revision_number"],
-                        nnode_bx : current_state.next,
+                        nnode_bx : current_state.next[0].replace("_", " ").title() if current_state.next and len(current_state.next) > 0 else ("END" if current_state.next is None else ""),
                         eligible_bx : eligible_bx_value,
                         threadid_bx : self.thread_id,
                         thread_pd : gr.Dropdown(label="choose thread", choices=self.threads, value=self.thread_id,interactive=True),
@@ -440,31 +599,32 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                 agent_info = gr.Markdown(
                     value="""## 🤖 Agent Control Center
 
-**🚀 Start here:** Enter patient query → Click 'Start Evaluation' → Monitor progress via notifications
+**Start Here:**
+- ➡️ **Enter Patient Query**
+- ➡️ **Click 'Start Evaluation'**
+- ➡️ **Monitor Progress via Notifications**
 
-**Advanced Options:** 
-- **⏸️ 'Continue Evaluation'** to resume
-- **⚙️ 'Manage Agent'** for interrupt configuration
-- **🔄 Thread management** for session switching
+**Process Overview:**
+- 🔍 **Profile Creation:** Generate a patient profile
+- ⚠️ **Policy Check:** Identify and resolve conflicting clinical policies
+- 🔄 **Trial Matching:** Find potential clinical trial matches
+- 🎯 **Trial Relevance:** Determine relevant trials for the patient
 
-**💡 Tip:** Follow notification guidance for next steps!""",
+**Tips:**
+- 💡 **Follow Notifications:** They guide you through each step
+- 💡 **Use 'Manage Agent'** for advanced options and configurations
+""",
                     visible=True
                 )
                 
                 with gr.Row():
-                    prompt_bx = gr.Textbox(label="Patient Prompt", value="Is patient_ID 56 eligible for any medical trial?")
-                    gen_btn = gr.Button("Start Evaluation", scale=0,min_width=80, variant='primary')
-                    cont_btn = gr.Button("Continue Evaluation", scale=0,min_width=80)
-                    # Add debug mode switch
-                    debug_mode = gr.Checkbox(label="🔧 Debug Mode", value=False, scale=0, min_width=120)
-                
-                # Add notification box below patient prompt
-                tab_notification = gr.Textbox(
-                    value="Ready to start agent evaluation",
-                    label="🔔 Check this tab",
-                    interactive=False,
-                    visible=True,
-                )
+                    prompt_bx = gr.Textbox(label="Prompt about patient", value="Is patient_ID 56 eligible for any medical trial?")
+                    tab_notification = gr.Textbox(
+                        value="Ready to start agent evaluation",
+                        label="🔔 Your Next Action 🔔",
+                        interactive=False,
+                        visible=True,
+                    )
                 
                 # Add processing indicator
                 processing_status = gr.Markdown(
@@ -473,12 +633,107 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                 )
                 
                 with gr.Row():
-                    last_node = gr.Textbox(label="Agent'slast stop", min_width=150)
+                    gen_btn = gr.Button("Start Evaluation", scale=0,min_width=80, variant='primary')
+                    cont_btn = gr.Button("Continue Evaluation", scale=0,min_width=80)
+                    # Add debug mode switch
+                    debug_mode = gr.Checkbox(label="🔧 Debug Mode", value=False, scale=0, min_width=120)
+                
+                with gr.Row():
+                    last_node = gr.Textbox(label="Agent's last stop", min_width=150)
                     eligible_bx = gr.Textbox(label="Is Patient Eligible?", min_width=50)
                     nnode_bx = gr.Textbox(label="Agent's next step", min_width=150)
                     threadid_bx = gr.Textbox(label="Thread", scale=0, min_width=80, visible=False)
                     search_bx = gr.Textbox(label="trial_searches", scale=0, min_width=110, visible=False)
                     count_bx = gr.Textbox(label="revision_number", scale=0, min_width=110, visible=False)
+                
+                with gr.Accordion("Manage Agent", open=True):
+                    checks = list(self.graph.nodes.keys())
+                    checks.remove('__start__')
+                    checks_values = checks.copy()
+                    # Fix: remove() only takes one argument at a time and 'policy_searcj' is a typo.
+                    # Should remove '__start__' and 'policy_search' if present.
+                    for node in ['__start__', 'policy_search', 'policy_evaluator', 'grade_trials', 'trial_search']:
+                        if node in checks:
+                            checks_values.remove(node)
+                    stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks_values, scale=0, min_width=400)
+                    with gr.Row():
+                        thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0, visible=False)
+                        step_pd = gr.Dropdown(choices=['N/A'],interactive=True, label="select step", min_width=160, scale=1, visible=False)
+                
+                # NEW SECTION: Add the four requested components
+                with gr.Accordion("", open=True):
+                    # 1. Patient Profile Display
+                    with gr.Row():
+                        with gr.Column(scale=3):
+                            profile_title = gr.Markdown(
+                                value="## 📋 Current Patient Profile",
+                                visible=True
+                            )
+                            profile_help = gr.Markdown(
+                                value="""**✏️ You can directly change the text and press the 'Modify' button**, especially in cases of:
+- ⚠️ **Conflicts with trial policies**
+- 🔍 **When relevant trials cannot be found**
+- 📝 **Helping patient to match specific trial**""",
+                                visible=False
+                            )
+                        with gr.Column(scale=1):
+                            modify_profile_btn = gr.Button("✏️ Modify Profile", min_width=120)
+                    with gr.Row():
+                        current_profile = gr.Textbox(
+                            label="",
+                            lines=1,
+                            interactive=True,
+                            placeholder="Patient profile will appear here after evaluation starts..."
+                        )
+                    
+                    # 2. Policy Conflict Resolution
+                    policy_title = gr.Markdown(
+                        value="## ⚠️ Policy Conflict Resolution",
+                        visible=True
+                    )
+                    policy_conflict_info = gr.Markdown(
+                        value="""**🚨 When policy conflicts occur** - Review and resolve policy issues.
+
+**Your options:**
+- 🔄 **Refresh** to review the specific policy issue
+- ⏭️ **Skip policy** if not applicable to this patient
+- 🔙 **Modify patient profile** to better match policies
+
+**When to skip:**
+- Policy doesn't apply to patient's condition
+- Policy is outdated or incorrectly matched
+- Manual review determines patient should proceed""",
+                        visible=False
+                    )
+                    with gr.Row():
+                        policy_refresh_btn = gr.Button("🔄 Refresh", scale=0, min_width=100)
+                        policy_skip_btn = gr.Button("⏭️ Skip Policy", scale=0, min_width=120)
+                        policy_big_skip_btn = gr.Button("⏭️ Skip All Policies", scale=0, min_width=140)
+                    with gr.Row():
+                        policy_status = gr.Textbox(
+                            label="⚠️ Policy Conflict Resolution", 
+                            lines=3,
+                            interactive=False,
+                            placeholder="Policy status will appear here after policy evaluation..."
+                        )
+                    
+                    # 3. Trials Summary Table
+                    with gr.Row():
+                        trials_summary = gr.Dataframe(
+                            label="🎯 Trials Summary (NCT ID | Diseases | Relevance)",
+                            headers=["nctid", "diseases", "relevance"],
+                            interactive=False,
+                            wrap=True
+                        )
+                    
+                    # 4. Stages History Box
+                    with gr.Row():
+                        stages_history = gr.Textbox(
+                            label="📈 Execution Stages History",
+                            lines=6,
+                            interactive=False,
+                            placeholder="Stages execution history will appear here as the agent runs..."
+                        )
                 
                 # Function to toggle debug fields visibility
                 def toggle_debug_fields(debug_enabled):
@@ -501,19 +756,31 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                 def hide_processing():
                     return gr.update(visible=False)
                 
-                with gr.Accordion("Manage Agent", open=True):
-                    checks = list(self.graph.nodes.keys())
-                    checks.remove('__start__')
-                    checks_values = checks.copy()
-                    # Fix: remove() only takes one argument at a time and 'policy_searcj' is a typo.
-                    # Should remove '__start__' and 'policy_search' if present.
-                    for node in ['__start__', 'policy_search', 'policy_evaluator', 'grade_trials', 'trial_search']:
-                        if node in checks:
-                            checks_values.remove(node)
-                    stop_after = gr.CheckboxGroup(checks,label="Interrupt After State", value=checks_values, scale=0, min_width=400)
-                    with gr.Row():
-                        thread_pd = gr.Dropdown(choices=self.threads,interactive=True, label="select thread", min_width=120, scale=0, visible=False)
-                        step_pd = gr.Dropdown(choices=['N/A'],interactive=True, label="select step", min_width=160, scale=1, visible=False)
+                # Function to refresh all status components
+                def refresh_all_status():
+                    """Refresh all the new status components."""
+                    # Check if patient profile exists and show help text if it does
+                    current_values = self.graph.get_state(self.thread)
+                    profile_ready = (current_values.values and 
+                                   "patient_profile" in current_values.values and 
+                                   current_values.values["patient_profile"] and 
+                                   current_values.values["patient_profile"].strip())
+                    
+                    # Check if policy search has been completed
+                    policy_search_done = (current_values.values and 
+                                        "last_node" in current_values.values and 
+                                        current_values.values["last_node"] in ["policy_search", "policy_evaluator", "trial_search", "grade_trials", "profile_rewriter"])
+                    
+                    return [
+                        self.get_state_value_only("patient_profile"),  # current_profile - keep original label
+                        self.get_last_policy_status(),      # policy_status  
+                        self.get_trials_summary_table(),    # trials_summary
+                        self.get_stages_history(),          # stages_history
+                        gr.update(visible=profile_ready),   # profile_help - show only when profile is ready
+                        gr.update(visible=True),            # profile_title - always visible
+                        gr.update(visible=policy_search_done),  # policy_conflict_info - show only when policy search is done
+                        gr.update(visible=True)             # policy_title - always visible
+                    ]
                 
                 # Add progress bar
                 # progress_bar =  gr.Progress()
@@ -524,6 +791,9 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                 # actions
                 sdisps =[prompt_bx,tab_notification,last_node,eligible_bx, nnode_bx,threadid_bx,count_bx,step_pd,thread_pd, search_bx]
                 
+                # Add the new status components to the display list
+                status_components = [current_profile, policy_status, trials_summary, stages_history, profile_help, profile_title, policy_conflict_info, policy_title]
+                
                 # Add debug mode toggle functionality
                 debug_mode.change(
                     fn=toggle_debug_fields,
@@ -531,48 +801,73 @@ C - You can skip the whole policy check stage for the patient. --> Skip the whol
                     outputs=[threadid_bx, search_bx, count_bx, thread_pd, step_pd]
                 )
                 
+
+                
+                # Wire up the modify profile button
+                modify_profile_btn.click(
+                    fn=self.modify_state, 
+                    inputs=[gr.Number("patient_profile", visible=False),
+                           gr.Number(self.SENTINEL_NONE, visible=False), 
+                           current_profile],
+                    outputs=None
+                ).then(
+                    fn=updt_disp, inputs=None, outputs=sdisps
+                ).then(
+                    fn=refresh_all_status, inputs=None, outputs=status_components
+                )
+                
+                # Wire up the policy conflict resolution buttons
+                policy_refresh_btn.click(fn=self.get_issue_policy, inputs=None, outputs=policy_status)
+                
+                def skip_policy_and_notify():
+                    """Skip the current policy and show confirmation message"""
+                    # Skip the policy in the state
+                    self.modify_state("policy_skip", self.SENTINEL_NONE, "")
+                    # Return confirmation message
+                    return gr.update(
+                        label="Policy Skipped", 
+                        value="The current policy is skipped for this patient.\n\nPlease continue evaluation of remaining policies in the Agent tab."
+                    )
+
+                def big_skip_policy_and_notify():
+                    """Skip the whole policy check and show confirmation message"""
+                    # Skip the policy in the state
+                    self.modify_state("policy_big_skip", self.SENTINEL_NONE, "")
+                    # Return confirmation message
+                    return gr.update(
+                        label="Policy Skipped", 
+                        value="✅ The 'policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches, via the Agent tab."
+                    )
+                
+                policy_skip_btn.click(fn=skip_policy_and_notify, inputs=None, outputs=policy_status).then(
+                                fn=updt_disp, inputs=None, outputs=sdisps).then(
+                                fn=refresh_all_status, inputs=None, outputs=status_components)
+                policy_big_skip_btn.click(fn=big_skip_policy_and_notify, inputs=None, outputs=policy_status).then(
+                                fn=updt_disp, inputs=None, outputs=sdisps).then(
+                                fn=refresh_all_status, inputs=None, outputs=status_components)
+                
                 # sdisps =[prompt_bx,last_node,eligible_bx, nnode_bx,threadid_bx,revision_bx,count_bx,step_pd,thread_pd]
                 thread_pd.input(self.switch_thread, [thread_pd], None).then(
-                                fn=updt_disp, inputs=None, outputs=sdisps)
+                                fn=updt_disp, inputs=None, outputs=sdisps).then(
+                                fn=refresh_all_status, inputs=None, outputs=status_components)
                 step_pd.input(self.copy_state,[step_pd],None).then(
-                              fn=updt_disp, inputs=None, outputs=sdisps)
+                              fn=updt_disp, inputs=None, outputs=sdisps).then(
+                              fn=refresh_all_status, inputs=None, outputs=status_components)
                 gen_btn.click(vary_btn,gr.Number("secondary", visible=False), gen_btn).then(
                               vary_btn,gr.Number("primary", visible=False), cont_btn).then(
                               fn=show_processing, inputs=None, outputs=processing_status).then(
                               fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live],show_progress=True).then(
                               fn=hide_processing, inputs=None, outputs=processing_status).then(
-                              fn=updt_disp, inputs=None, outputs=sdisps)
+                              fn=updt_disp, inputs=None, outputs=sdisps).then(
+                              fn=refresh_all_status, inputs=None, outputs=status_components)
                 cont_btn.click(fn=show_processing, inputs=None, outputs=processing_status).then(
                                fn=self.run_agent, inputs=[gr.Number(False, visible=False),prompt_bx,stop_after], 
                                outputs=[live]).then(
                                fn=hide_processing, inputs=None, outputs=processing_status).then(
-                               fn=updt_disp, inputs=None, outputs=sdisps)            
+                               fn=updt_disp, inputs=None, outputs=sdisps).then(
+                               fn=refresh_all_status, inputs=None, outputs=status_components)
         
-            with gr.Tab("Profile"):
-                # Add informative text at the top of the Profile tab
-                profile_info = gr.Markdown(
-                    value="""## 📋 Patient Profile Information
-
-**🔄 Refresh the agent profile** - The profile is generated by a language model based on patient data.
-
-**✏️ You can directly change the text and press the 'Modify' button**, especially in cases of:
-- ⚠️ Conflicts with trial policies
-- 🔍 When relevant trials cannot be found
-- 📝 Need to adjust the profile for specific requirements
-
-**💡 Tip:** The patient profile is crucial for matching appropriate clinical trials.""",
-                    visible=True
-                )
-                
-                with gr.Row():
-                    refresh_btn = gr.Button("Refresh")
-                    modify_btn = gr.Button("Modify")
-
-                profile = gr.Textbox(label="Patient's profile created from patient's data", lines=10, interactive=True)
-                refresh_btn.click(fn=self.get_state, inputs=gr.Number("patient_profile", visible=False), outputs=profile)
-                modify_btn.click(fn=self.modify_state, inputs=[gr.Number("patient_profile", visible=False),
-                                                          gr.Number(self.SENTINEL_NONE, visible=False), profile],outputs=None).then(
-                                 fn=updt_disp, inputs=None, outputs=sdisps)                                              
+                                              
 
             with gr.Tab("Relevant Policies"):
                 # Add informative text at the top of the Policies tab
