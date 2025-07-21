@@ -576,16 +576,23 @@ Your options:
 
     def create_interface(self):
         with gr.Blocks(
-            theme=gr.themes.Default(spacing_size='sm',text_size="sm"),
+            theme=gr.themes.Default(spacing_size='sm', text_size="lg"),
             css="""
-            .main-container {
+            .main-container, .gradio-container {
                 max-width: 1200px !important;
                 margin: 0 auto !important;
                 padding: 20px !important;
             }
-            .gradio-container {
-                max-width: 1200px !important;
-                margin: 0 auto !important;
+            .gradio-container, .main-container, body, html {
+                font-size: 22px !important;
+            }
+            .gr-textbox label, .gr-textbox textarea {
+                font-size: 22px !important;
+            }
+            /* Make Start Evaluation and Continue Evaluation button text smaller */
+            button:has(span:contains('Start Evaluation')), button:has(span:contains('Continue Evaluation')) {
+                font-size: 13px !important;
+                min-width: 180px !important;
             }
             """
         ) as demo:
@@ -743,8 +750,8 @@ Your options:
                 )
                 
                 with gr.Row():
-                    gen_btn = gr.Button("Start Evaluation", scale=0,min_width=80, variant='primary')
-                    cont_btn = gr.Button("Continue Evaluation", scale=0,min_width=80)
+                    gen_btn = gr.Button("Start Evaluation", scale=0,min_width=120, variant='primary')
+                    cont_btn = gr.Button("Continue Evaluation", scale=0,min_width=120)
                     # Add debug mode switch
                     debug_mode = gr.Checkbox(label="🔧 Debug Mode", value=False, scale=0, min_width=120)
                 
