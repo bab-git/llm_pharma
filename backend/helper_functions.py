@@ -477,30 +477,30 @@ def create_agent_state() -> AgentState:
         "selected_model": "llama-3.3-70b-versatile"
     }
 
-def extract_error_message(e: Exception, context: str) -> str:
-    """
-    Extract and format error message from an exception, with special handling for rate limit errors.
+# def extract_error_message(e: Exception, context: str) -> str:
+#     """
+#     Extract and format error message from an exception, with special handling for rate limit errors.
     
-    Args:
-        e: The exception that occurred
-        context: The context where the error occurred (e.g., "trial search", "patient collection")
+#     Args:
+#         e: The exception that occurred
+#         context: The context where the error occurred (e.g., "trial search", "patient collection")
         
-    Returns:
-        Formatted error message string
-    """
-    # Check if it's a rate limit error
-    if hasattr(e, 'body') and hasattr(e.body, 'get'):
-        error_body = e.body.get('error', {})
-        if isinstance(error_body, dict) and 'message' in error_body:
-            error_msg = error_body['message']
-            if 'rate limit' in error_msg.lower() or 'rate limit reached' in error_msg.lower():
-                return f"🚨 Rate limit reached for the AI model. Please try later or select a different model. Error: {error_msg}"
-            else:
-                return f"❌ Error in {context}: {error_msg}"
-        else:
-            return f"❌ Error in {context}: {str(e)}"
-    else:
-        return f"❌ Error in {context}: {str(e)}"
+#     Returns:
+#         Formatted error message string
+#     """
+#     # Check if it's a rate limit error
+#     if hasattr(e, 'body') and hasattr(e.body, 'get'):
+#         error_body = e.body.get('error', {})
+#         if isinstance(error_body, dict) and 'message' in error_body:
+#             error_msg = error_body['message']
+#             if 'rate limit' in error_msg.lower() or 'rate limit reached' in error_msg.lower():
+#                 return f"🚨 Rate limit reached for the AI model. Please try later or select a different model. Error: {error_msg}"
+#             else:
+#                 return f"❌ Error in {context}: {error_msg}"
+#         else:
+#             return f"❌ Error in {context}: {str(e)}"
+#     else:
+#         return f"❌ Error in {context}: {str(e)}"
 
 # def get_groq_models():
 #     """
@@ -805,7 +805,7 @@ def patient_collector_node(state: AgentState) -> dict:
         }
     except Exception as e:
         print(f"❌ Error in patient collection: {e}")
-        error_message = extract_error_message(e, "patient collection")
+        # error_message = extract_error_message(e, "patient collection")
         return {
             "last_node": "patient_collector",
             "patient_data": {},
@@ -813,7 +813,7 @@ def patient_collector_node(state: AgentState) -> dict:
             "patient_id": 0,
             "revision_number": state.get("revision_number", 0) + 1,
             "policy_eligible": False,
-            "error_message": error_message
+            "error_message": str(e) if e else ""
         }
 
 def create_policy_vectorstore(policy_file_path="source_data/instut_trials_policy.md", 
@@ -1092,14 +1092,14 @@ def policy_search_node(state: AgentState) -> dict:
         
     except Exception as e:
         print(f"❌ Error in policy search: {e}")
-        error_message = extract_error_message(e, "policy search")
+        # error_message = extract_error_message(e, "policy search")
         
         return {
             "last_node": "policy_search",
             "policies": [],
             "unchecked_policies": [],
             "policy_eligible": state.get("policy_eligible", False),
-            "error_message": error_message
+            "error_message": str(e) if e else ""
         }
 
 # --- Fix policy_evaluator_node ---
@@ -1189,7 +1189,7 @@ def policy_evaluator_node(state: AgentState) -> dict:
         }
     except Exception as e:
         print(f"❌ Error in policy evaluation: {e}")
-        error_message = extract_error_message(e, "policy evaluation")
+        # error_message = extract_error_message(e, "policy evaluation")
         return {
             "last_node": "policy_evaluator",
             "policy_eligible": False,
@@ -1197,7 +1197,7 @@ def policy_evaluator_node(state: AgentState) -> dict:
             "revision_number": state.get("revision_number", 0) + 1,
             'checked_policy': None,
             'policy_qs': "",
-            "error_message": error_message
+            "error_message": str(e) if e else ""
         }
 
 # --- Fix trial_search_node ---
@@ -1254,13 +1254,13 @@ def trial_search_node(state: AgentState) -> dict:
         }
     except Exception as e:
         print(f"❌ Error in trial search: {e}")
-        error_message = extract_error_message(e, "trial search")
+        # error_message = extract_error_message(e, "trial search")
         return {
             'last_node': 'trial_search',
             'trials': [],
             'trial_searches': state.get('trial_searches', 0) + 1,
             "policy_eligible": state.get("policy_eligible", False),
-            "error_message": error_message
+            "error_message": str(e) if e else ""
         }
 
 # --- Fix grade_trials_node ---
@@ -1388,12 +1388,12 @@ def grade_trials_node(state: AgentState) -> dict:
         }
     except Exception as e:
         print(f"❌ Error in trial grading: {e}")
-        error_message = extract_error_message(e, "trial grading")
+        # error_message = extract_error_message(e, "trial grading")
         return {
             'last_node': 'grade_trials',
             "relevant_trials": [],
             "policy_eligible": state.get("policy_eligible", False),
-            "error_message": error_message
+            "error_message": str(e) if e else ""
         }
 
 # --- Fix profile_rewriter_node ---
@@ -1450,12 +1450,12 @@ category X: [patient's disease] can be related to X due to Y.
         }
     except Exception as e:
         print(f"❌ Error in profile rewriting: {e}")
-        error_message = extract_error_message(e, "profile rewriting")
+        # error_message = extract_error_message(e, "profile rewriting")
         return {
             'last_node': 'profile_rewriter',
             'patient_profile': state.get("patient_profile", ""),
             "policy_eligible": state.get("policy_eligible", False),
-            "error_message": error_message
+            "error_message": str(e) if e else ""
         }
 
 # Conditional edge functions
@@ -1544,20 +1544,20 @@ def create_tool_node_with_fallback(tools: list) -> dict:
     )
 
 
-def _print_event(event: dict, _printed: set, max_length=1500):
-    current_state = event.get("dialog_state")
-    if current_state:
-        print("Currently in: ", current_state[-1])
-    message = event.get("messages")
-    if message:
-        if isinstance(message, list):
-            message = message[-1]
-        if message.id not in _printed:
-            msg_repr = message.pretty_repr(html=True)
-            if len(msg_repr) > max_length:
-                msg_repr = msg_repr[:max_length] + " ... (truncated)"
-            print(msg_repr)
-            _printed.add(message.id)
+# def _print_event(event: dict, _printed: set, max_length=1500):
+#     current_state = event.get("dialog_state")
+#     if current_state:
+#         print("Currently in: ", current_state[-1])
+#     message = event.get("messages")
+#     if message:
+#         if isinstance(message, list):
+#             message = message[-1]
+#         if message.id not in _printed:
+#             msg_repr = message.pretty_repr(html=True)
+#             if len(msg_repr) > max_length:
+#                 msg_repr = msg_repr[:max_length] + " ... (truncated)"
+#             print(msg_repr)
+#             _printed.add(message.id)
 
 
 def dataset_create_trials(status = None):
