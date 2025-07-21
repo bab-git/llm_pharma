@@ -135,11 +135,6 @@ class Patient_ID(BaseModel):
     """Model for extracting patient ID from user prompt."""
     patient_id: int
 
-class policy_relevance(BaseModel):
-    """Policy relevance score"""
-    relevant: str = Field(description="is policy relevant? 'yes' or 'no'.")
-    reason: str
-
 class eligibility(BaseModel):
     """Give the patient's eligibility result."""
     eligibility: str = Field(description="Patient's eligibility for the clinical trial. 'yes' or 'no'")
@@ -394,34 +389,6 @@ def get_patient_data(patient_id: int, db_path="sql_server/patients.db") -> dict:
         results = dict(zip(column_names, patient_data))    
     return results
 
-# Not used yet
-def add_patient_data(patient_data: dict, db_path="../data/patients.db"):    
-    """
-    Adds a new patient to the SQLite database.
-    
-    Args:
-        patient_data: Dictionary containing patient information
-        db_path: Path to the SQLite database file
-    """
-    name = patient_data['name']
-    age = patient_data['age']
-    medical_history = patient_data['medical_history']
-    previous_trials = patient_data['previous_trials']
-    trial_status = patient_data['trial_status']
-    last_trial_dates = patient_data['last_trial_dates']
-
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # Insert the new patient data into the database
-    cursor.execute('''
-    INSERT INTO patients (name, age, medical_history, previous_trials, trial_status, last_trial_dates)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ''', (name, age, medical_history, previous_trials, trial_status, last_trial_dates))
-    
-    conn.commit()
-    conn.close()
-
 class AgentState(TypedDict):
     """State definition for the LLM Pharma workflow agent."""
     last_node: str
@@ -476,75 +443,6 @@ def create_agent_state() -> AgentState:
         "error_message": "",
         "selected_model": "llama-3.3-70b-versatile"
     }
-
-# def extract_error_message(e: Exception, context: str) -> str:
-#     """
-#     Extract and format error message from an exception, with special handling for rate limit errors.
-    
-#     Args:
-#         e: The exception that occurred
-#         context: The context where the error occurred (e.g., "trial search", "patient collection")
-        
-#     Returns:
-#         Formatted error message string
-#     """
-#     # Check if it's a rate limit error
-#     if hasattr(e, 'body') and hasattr(e.body, 'get'):
-#         error_body = e.body.get('error', {})
-#         if isinstance(error_body, dict) and 'message' in error_body:
-#             error_msg = error_body['message']
-#             if 'rate limit' in error_msg.lower() or 'rate limit reached' in error_msg.lower():
-#                 return f"🚨 Rate limit reached for the AI model. Please try later or select a different model. Error: {error_msg}"
-#             else:
-#                 return f"❌ Error in {context}: {error_msg}"
-#         else:
-#             return f"❌ Error in {context}: {str(e)}"
-#     else:
-#         return f"❌ Error in {context}: {str(e)}"
-
-# def get_groq_models():
-#     """
-#     Get a list of Groq models with tool calling capabilities, sorted by performance.
-    
-#     Returns:
-#         List of tuples: (model_id, display_name, performance_rating)
-#     """
-#     return [
-#         # High Performance Models (Tool Calling + High Quality)
-#         ("llama-3.3-70b-versatile", "🦙 Llama 3.3 70B Versatile (Best)", "⭐⭐⭐⭐⭐"),
-#         ("llama-3.1-8b-versatile", "🦙 Llama 3.1 8B Versatile (Fast)", "⭐⭐⭐⭐"),
-#         ("llama-3.1-405b-reasoning", "🦙 Llama 3.1 405B Reasoning (Best Reasoning)", "⭐⭐⭐⭐⭐"),
-#         ("llama-3.1-70b-versatile", "🦙 Llama 3.1 70B Versatile (Balanced)", "⭐⭐⭐⭐"),
-        
-#         # Good Performance Models
-#         ("llama-3.1-8b-instruct", "🦙 Llama 3.1 8B Instruct (Fast)", "⭐⭐⭐"),
-#         ("llama-3.1-70b-instruct", "🦙 Llama 3.1 70B Instruct (Good)", "⭐⭐⭐⭐"),
-        
-#         # Alternative Models
-#         ("gemma2-9b-it", "💎 Gemma2 9B IT (Fast)", "⭐⭐⭐"),
-#         ("gemma2-27b-it", "💎 Gemma2 27B IT (Good)", "⭐⭐⭐⭐"),
-#         ("mixtral-8x7b-32768", "🎯 Mixtral 8x7B (Balanced)", "⭐⭐⭐⭐"),
-        
-#         # Smaller/Faster Models
-#         ("llama-3.1-1b-instruct", "🦙 Llama 3.1 1B Instruct (Very Fast)", "⭐⭐"),
-#         ("llama-3.1-3b-instruct", "🦙 Llama 3.1 3B Instruct (Fast)", "⭐⭐⭐"),
-#     ]
-
-# def get_model_display_name(model_id: str) -> str:
-#     """
-#     Get the display name for a model ID.
-    
-#     Args:
-#         model_id: The model ID
-        
-#     Returns:
-#         Display name for the model
-#     """
-#     models = get_groq_models()
-#     for mid, display_name, _ in models:
-#         if mid == model_id:
-#             return display_name
-#     return model_id  # Return the ID if not found
 
 def policy_tools(policy_qs: str, patient_profile: str, model_agent, llm_manager_tool):
     """
@@ -1508,58 +1406,6 @@ def should_continue_trials(state: AgentState) -> str:
         return END
 
 
-def llm_completion(prompt, model=None, temperature=0, sys_content="You are a helpful assistant."):
-    if model == None:
-        raise ValueError('Please specify a model ID from openai')
-    client = OpenAI()
-    messages=[
-        {"role": "system", "content": sys_content},
-        {"role": "user", "content": prompt}
-    ]
-    completion = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=temperature, 
-    )
-    output = completion.choices[0].message.content
-    return output
-
-def handle_tool_error(state) -> dict:
-    error = state.get("error")
-    tool_calls = state["messages"][-1].tool_calls
-    return {
-        "messages": [
-            ToolMessage(
-                content=f"Error: {repr(error)}\n please fix your mistakes.",
-                tool_call_id=tc["id"],
-            )
-            for tc in tool_calls
-        ]
-    }
-
-
-def create_tool_node_with_fallback(tools: list) -> dict:
-    return ToolNode(tools).with_fallbacks(
-        [RunnableLambda(handle_tool_error)], exception_key="error"
-    )
-
-
-# def _print_event(event: dict, _printed: set, max_length=1500):
-#     current_state = event.get("dialog_state")
-#     if current_state:
-#         print("Currently in: ", current_state[-1])
-#     message = event.get("messages")
-#     if message:
-#         if isinstance(message, list):
-#             message = message[-1]
-#         if message.id not in _printed:
-#             msg_repr = message.pretty_repr(html=True)
-#             if len(msg_repr) > max_length:
-#                 msg_repr = msg_repr[:max_length] + " ... (truncated)"
-#             print(msg_repr)
-#             _printed.add(message.id)
-
-
 def dataset_create_trials(status = None):
     """
     Creates a dataset of clinical trials by downloading a CSV file from a GitHub repository and preprocessing it.
@@ -1656,36 +1502,3 @@ def disease_map(disease_list):
     if len(categories) == 0:
         categories.add('other_conditions')
     return list(categories)
-
-def fn_get_state(graph, thread, vernose = False, next = None):
-    states = []
-    state_next = []
-    for state in graph.get_state_history(thread):
-        if vernose:
-            print(state)
-            print('--')
-        states.append(state)
-    state_last = states[0]
-    
-    if next is not None:
-        for state in graph.get_state_history(thread):
-            if len(state.next)>0 and state.next[0] == next:
-                state_next = state
-                break
-    return states, state_next, state_last
-
-def resume_from_state(graph, state, key = None, value = None , as_node = None):
-    if key is not None:
-        state.values[key] = value
-    
-    if as_node is not None:
-        branch_state = graph.update_state(state.config, state.values, as_node = as_node)
-    else:
-        branch_state = graph.update_state(state.config, state.values)
-    print("--------- continue from modified state ---------")
-    events = []
-            
-    for event in graph.stream(None, branch_state):
-        events.append(event)
-        print(event)
-    return events
