@@ -184,8 +184,8 @@ class PatientCollectorConfig:
         #     self.modelID_groq_tool = "llama-3.3-70b-versatile"
                 
         self.modelID_groq = "meta-llama/llama-4-scout-17b-16e-instruct"
-        # self.modelID_groq_tool = "llama-3.1-8b-instant"
-        self.modelID_groq_tool = "llama-3.1-8b-instant"
+        self.modelID_groq_tool = "llama-3.1-8b-instant"        
+        # self.modelID_groq_tool = "llama-3.3-70b-versatile"
 
 
         self.modelID = "gpt-3.5-turbo"
@@ -517,49 +517,49 @@ def extract_error_message(e: Exception, context: str) -> str:
     else:
         return f"❌ Error in {context}: {str(e)}"
 
-def get_groq_models():
-    """
-    Get a list of Groq models with tool calling capabilities, sorted by performance.
+# def get_groq_models():
+#     """
+#     Get a list of Groq models with tool calling capabilities, sorted by performance.
     
-    Returns:
-        List of tuples: (model_id, display_name, performance_rating)
-    """
-    return [
-        # High Performance Models (Tool Calling + High Quality)
-        ("llama-3.3-70b-versatile", "🦙 Llama 3.3 70B Versatile (Best)", "⭐⭐⭐⭐⭐"),
-        ("llama-3.1-8b-versatile", "🦙 Llama 3.1 8B Versatile (Fast)", "⭐⭐⭐⭐"),
-        ("llama-3.1-405b-reasoning", "🦙 Llama 3.1 405B Reasoning (Best Reasoning)", "⭐⭐⭐⭐⭐"),
-        ("llama-3.1-70b-versatile", "🦙 Llama 3.1 70B Versatile (Balanced)", "⭐⭐⭐⭐"),
+#     Returns:
+#         List of tuples: (model_id, display_name, performance_rating)
+#     """
+#     return [
+#         # High Performance Models (Tool Calling + High Quality)
+#         ("llama-3.3-70b-versatile", "🦙 Llama 3.3 70B Versatile (Best)", "⭐⭐⭐⭐⭐"),
+#         ("llama-3.1-8b-versatile", "🦙 Llama 3.1 8B Versatile (Fast)", "⭐⭐⭐⭐"),
+#         ("llama-3.1-405b-reasoning", "🦙 Llama 3.1 405B Reasoning (Best Reasoning)", "⭐⭐⭐⭐⭐"),
+#         ("llama-3.1-70b-versatile", "🦙 Llama 3.1 70B Versatile (Balanced)", "⭐⭐⭐⭐"),
         
-        # Good Performance Models
-        ("llama-3.1-8b-instruct", "🦙 Llama 3.1 8B Instruct (Fast)", "⭐⭐⭐"),
-        ("llama-3.1-70b-instruct", "🦙 Llama 3.1 70B Instruct (Good)", "⭐⭐⭐⭐"),
+#         # Good Performance Models
+#         ("llama-3.1-8b-instruct", "🦙 Llama 3.1 8B Instruct (Fast)", "⭐⭐⭐"),
+#         ("llama-3.1-70b-instruct", "🦙 Llama 3.1 70B Instruct (Good)", "⭐⭐⭐⭐"),
         
-        # Alternative Models
-        ("gemma2-9b-it", "💎 Gemma2 9B IT (Fast)", "⭐⭐⭐"),
-        ("gemma2-27b-it", "💎 Gemma2 27B IT (Good)", "⭐⭐⭐⭐"),
-        ("mixtral-8x7b-32768", "🎯 Mixtral 8x7B (Balanced)", "⭐⭐⭐⭐"),
+#         # Alternative Models
+#         ("gemma2-9b-it", "💎 Gemma2 9B IT (Fast)", "⭐⭐⭐"),
+#         ("gemma2-27b-it", "💎 Gemma2 27B IT (Good)", "⭐⭐⭐⭐"),
+#         ("mixtral-8x7b-32768", "🎯 Mixtral 8x7B (Balanced)", "⭐⭐⭐⭐"),
         
-        # Smaller/Faster Models
-        ("llama-3.1-1b-instruct", "🦙 Llama 3.1 1B Instruct (Very Fast)", "⭐⭐"),
-        ("llama-3.1-3b-instruct", "🦙 Llama 3.1 3B Instruct (Fast)", "⭐⭐⭐"),
-    ]
+#         # Smaller/Faster Models
+#         ("llama-3.1-1b-instruct", "🦙 Llama 3.1 1B Instruct (Very Fast)", "⭐⭐"),
+#         ("llama-3.1-3b-instruct", "🦙 Llama 3.1 3B Instruct (Fast)", "⭐⭐⭐"),
+#     ]
 
-def get_model_display_name(model_id: str) -> str:
-    """
-    Get the display name for a model ID.
+# def get_model_display_name(model_id: str) -> str:
+#     """
+#     Get the display name for a model ID.
     
-    Args:
-        model_id: The model ID
+#     Args:
+#         model_id: The model ID
         
-    Returns:
-        Display name for the model
-    """
-    models = get_groq_models()
-    for mid, display_name, _ in models:
-        if mid == model_id:
-            return display_name
-    return model_id  # Return the ID if not found
+#     Returns:
+#         Display name for the model
+#     """
+#     models = get_groq_models()
+#     for mid, display_name, _ in models:
+#         if mid == model_id:
+#             return display_name
+#     return model_id  # Return the ID if not found
 
 def policy_tools(policy_qs: str, patient_profile: str, model_agent):
     """

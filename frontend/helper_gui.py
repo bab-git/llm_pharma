@@ -66,7 +66,7 @@ Your options:
             
         return node_to_tab.get(last_node, f'Agent is at: {last_node}')
 
-    def run_agent(self, start,patient_prompt,stop_after):
+    def run_agent(self, start, patient_prompt, stop_after):
         #global partial_message, thread_id,thread
         #global response, max_iterations, iterations, threads
         if start:
@@ -92,21 +92,36 @@ Your options:
             self.response = self.graph.invoke(config, self.thread)
             self.iterations[self.thread_id] += 1
             self.partial_message += str(self.response)
-            self.partial_message += f"\n {40*'========='}\n\n"
-            ## fix
-            last_node,nnode,_,rev,acount = self.get_disp_state()
-            yield self.partial_message,last_node,nnode,self.thread_id,rev,acount,
-            config = None #need
-            #print(f"run_agent:{last_node}")
-            if not nnode:  
-                #print("Hit the end")
+            self.partial_message += f"\n {'='*40}\n\n"
+            last_node, nnode, _, rev, acount = self.get_disp_state()
+
+            # Default: don't update
+            policies_update = gr.update()
+            policy_issue_update = gr.update()
+            trials_update = gr.update()
+
+            # Update based on node
+            if last_node == "policy_search":
+                policies_update = self.get_current_policies()
+            if last_node == "policy_evaluator":
+                policy_issue_update = self.get_last_policy_status()
+            if last_node == "trial_search":
+                trials_update = self.get_trials_summary_table()
+            if last_node == "grade_trials":
+                trials_update = self.get_trials_summary_table()
+
+            # Only yield the 4 outputs expected by Gradio
+            yield (
+                self.partial_message,  # live
+                policies_update,      # current_policies
+                policy_issue_update,  # policy_status
+                trials_update         # trials_summary (must be a DataFrame or gr.update())
+            )
+            config = None
+            if not nnode:
                 return
             if last_node in stop_after:
-                #print(f"stopping due to stop_after {last_node}")
                 return
-            else:
-                #print(f"Not stopping on last_node {last_node}")
-                pass
         return
     
     def get_disp_state(self,):
@@ -143,36 +158,36 @@ Your options:
         else:
             return gr.update(value="", lines=5)
     
-    def get_groq_models(self):
-        """Get a list of Groq models with tool calling capabilities, sorted by performance."""
-        return [
-            # High Performance Models (Tool Calling + High Quality)
-            ("llama-3.3-70b-versatile", "🦙 Llama 3.3 70B Versatile (Best)", "⭐⭐⭐⭐⭐"),
-            ("llama-3.1-8b-versatile", "🦙 Llama 3.1 8B Versatile (Fast)", "⭐⭐⭐⭐"),
-            ("llama-3.1-405b-reasoning", "🦙 Llama 3.1 405B Reasoning (Best Reasoning)", "⭐⭐⭐⭐⭐"),
-            ("llama-3.1-70b-versatile", "🦙 Llama 3.1 70B Versatile (Balanced)", "⭐⭐⭐⭐"),
+    # def get_groq_models(self):
+    #     """Get a list of Groq models with tool calling capabilities, sorted by performance."""
+    #     return [
+    #         # High Performance Models (Tool Calling + High Quality)
+    #         ("llama-3.3-70b-versatile", "🦙 Llama 3.3 70B Versatile (Best)", "⭐⭐⭐⭐⭐"),
+    #         ("llama-3.1-8b-versatile", "🦙 Llama 3.1 8B Versatile (Fast)", "⭐⭐⭐⭐"),
+    #         ("llama-3.1-405b-reasoning", "🦙 Llama 3.1 405B Reasoning (Best Reasoning)", "⭐⭐⭐⭐⭐"),
+    #         ("llama-3.1-70b-versatile", "🦙 Llama 3.1 70B Versatile (Balanced)", "⭐⭐⭐⭐"),
             
-            # Good Performance Models
-            ("llama-3.1-8b-instruct", "🦙 Llama 3.1 8B Instruct (Fast)", "⭐⭐⭐"),
-            ("llama-3.1-70b-instruct", "🦙 Llama 3.1 70B Instruct (Good)", "⭐⭐⭐⭐"),
+    #         # Good Performance Models
+    #         ("llama-3.1-8b-instruct", "🦙 Llama 3.1 8B Instruct (Fast)", "⭐⭐⭐"),
+    #         ("llama-3.1-70b-instruct", "🦙 Llama 3.1 70B Instruct (Good)", "⭐⭐⭐⭐"),
             
-            # Alternative Models
-            ("gemma2-9b-it", "💎 Gemma2 9B IT (Fast)", "⭐⭐⭐"),
-            ("gemma2-27b-it", "💎 Gemma2 27B IT (Good)", "⭐⭐⭐⭐"),
-            ("mixtral-8x7b-32768", "🎯 Mixtral 8x7B (Balanced)", "⭐⭐⭐⭐"),
+    #         # Alternative Models
+    #         ("gemma2-9b-it", "💎 Gemma2 9B IT (Fast)", "⭐⭐⭐"),
+    #         ("gemma2-27b-it", "💎 Gemma2 27B IT (Good)", "⭐⭐⭐⭐"),
+    #         ("mixtral-8x7b-32768", "🎯 Mixtral 8x7B (Balanced)", "⭐⭐⭐⭐"),
             
-            # Smaller/Faster Models
-            ("llama-3.1-1b-instruct", "🦙 Llama 3.1 1B Instruct (Very Fast)", "⭐⭐"),
-            ("llama-3.1-3b-instruct", "🦙 Llama 3.1 3B Instruct (Fast)", "⭐⭐⭐"),
-        ]
+    #         # Smaller/Faster Models
+    #         ("llama-3.1-1b-instruct", "🦙 Llama 3.1 1B Instruct (Very Fast)", "⭐⭐"),
+    #         ("llama-3.1-3b-instruct", "🦙 Llama 3.1 3B Instruct (Fast)", "⭐⭐⭐"),
+    #     ]
     
-    def get_model_id_from_display_name(self, display_name):
-        """Convert display name back to model ID."""
-        models = self.get_groq_models()
-        for model_id, disp_name, _ in models:
-            if disp_name == display_name:
-                return model_id
-        return "llama-3.3-70b-versatile"  # Default fallback  
+    # def get_model_id_from_display_name(self, display_name):
+    #     """Convert display name back to model ID."""
+    #     models = self.get_groq_models()
+    #     for model_id, disp_name, _ in models:
+    #         if disp_name == display_name:
+    #             return model_id
+    #     return "llama-3.3-70b-versatile"  # Default fallback  
     
     def get_content(self, key):
         current_values = self.graph.get_state(self.thread)
@@ -968,15 +983,15 @@ You can obtain more information about each trial's details and possible relevanc
                         return f"Is patient_ID {patient_id} eligible for any medical trial?"
                     return "Is patient_ID 56 eligible for any medical trial?"
                 
-                def update_selected_model(model_display_name):
-                    """Update the selected model in the agent state"""
-                    model_id = self.get_model_id_from_display_name(model_display_name)
-                    # Update the state with the new model
-                    current_values = self.graph.get_state(self.thread)
-                    if current_values.values:
-                        current_values.values["selected_model"] = model_id
-                        self.graph.update_state(self.thread, current_values.values)
-                    return f"✅ Model updated to: {model_display_name}"
+                # def update_selected_model(model_display_name):
+                #     """Update the selected model in the agent state"""
+                #     model_id = self.get_model_id_from_display_name(model_display_name)
+                #     # Update the state with the new model
+                #     current_values = self.graph.get_state(self.thread)
+                #     if current_values.values:
+                #         current_values.values["selected_model"] = model_id
+                #         self.graph.update_state(self.thread, current_values.values)
+                #     return f"✅ Model updated to: {model_display_name}"
                 
                 policy_skip_btn.click(fn=skip_policy_and_notify, inputs=None, outputs=policy_status).then(
                                 fn=updt_disp, inputs=None, outputs=sdisps).then(
@@ -995,13 +1010,13 @@ You can obtain more information about each trial's details and possible relevanc
                 gen_btn.click(vary_btn,gr.Number("secondary", visible=False), gen_btn).then(
                               vary_btn,gr.Number("primary", visible=False), cont_btn).then(
                               fn=show_processing, inputs=None, outputs=processing_status).then(
-                              fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live],show_progress=True).then(
+                              fn=self.run_agent, inputs=[gr.Number(True, visible=False),prompt_bx,stop_after], outputs=[live, current_policies, policy_status, trials_summary],show_progress=True).then(
                               fn=hide_processing, inputs=None, outputs=processing_status).then(
                               fn=updt_disp, inputs=None, outputs=sdisps).then(
                               fn=refresh_all_status, inputs=None, outputs=status_components)
                 cont_btn.click(fn=show_processing, inputs=None, outputs=processing_status).then(
                                fn=self.run_agent, inputs=[gr.Number(False, visible=False),prompt_bx,stop_after], 
-                               outputs=[live]).then(
+                               outputs=[live, current_policies, policy_status, trials_summary]).then(
                                fn=hide_processing, inputs=None, outputs=processing_status).then(
                                fn=updt_disp, inputs=None, outputs=sdisps).then(
                                fn=refresh_all_status, inputs=None, outputs=status_components)
