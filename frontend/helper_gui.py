@@ -35,11 +35,11 @@ class trials_gui( ):
         trials = current_state.values.get("trials", [])
         # Map nodes to appropriate tab notifications
         node_to_tab = {
-            'patient_collector': 'Go to Profile Tab - Patient profile has been created',
-            'policy_search': 'Go to Policies Tab - Relevant policies have been retrieved', 
-            'policy_evaluator': 'Go to Policy Issue Tab - Policy evaluation completed',
-            'trial_search': 'Go to Potential Trials Tab - Potentially relevant clinical trials have been found',
-            'grade_trials': 'Go to Trials Scores Tab - Calculated Trial Relevance scores are ready',            
+            'patient_collector': 'Check Patient Profile - Patient profile has been created',
+            'policy_search': 'Check Policies - Relevant policies have been retrieved', 
+            'policy_evaluator': 'Check Policy Issue - Policy evaluation completed',
+            'trial_search': 'Check Potential Trials - Potentially relevant clinical trials have been found',
+            'grade_trials': 'Check Trials Scores - Calculated Trial Relevance scores are ready',            
             'profile_rewriter': 'Go to Profile Tab - Patient profile has been updated'
         }
         

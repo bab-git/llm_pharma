@@ -176,17 +176,16 @@ class PatientCollectorConfig:
         self.db_path = db_path
         
         # Use selected model or default to best performing model
-        if selected_model:
-            self.modelID_groq = selected_model
-            self.modelID_groq_tool = selected_model
-        else:
-            self.modelID_groq = "llama-3.3-70b-versatile"  # Best default
-            self.modelID_groq_tool = "llama-3.3-70b-versatile"
-        
-        # DEBUG:
-        self.modelID_groq = "llama3-8b-8192"
+        # if selected_model:
+        #     self.modelID_groq = selected_model
+        #     self.modelID_groq_tool = selected_model
+        # else:
+        #     self.modelID_groq = "llama-3.3-70b-versatile"  # Best default
+        #     self.modelID_groq_tool = "llama-3.3-70b-versatile"
+                
+        self.modelID_groq = "meta-llama/llama-4-scout-17b-16e-instruct"
         # self.modelID_groq_tool = "llama-3.1-8b-instant"
-        self.modelID_groq_tool = "meta-llama/llama-4-scout-17b-16e-instruct"
+        self.modelID_groq_tool = "llama-3.1-8b-instant"
 
 
         self.modelID = "gpt-3.5-turbo"
@@ -574,131 +573,101 @@ def policy_tools(policy_qs: str, patient_profile: str, model_agent):
     Returns:
         str: Evaluation result
     """
-    class CalculatorInput(BaseModel):
-        num1: float = Field(description="first number")
-        num2: float = Field(description="second number")
-
-    def multiply(num1: float, num2: float) -> float:
-        "multiplies two input numbers together, num1 and num2"
-        return (num1 * num2)
-
-    multiply_tool = StructuredTool.from_function(
-        func=multiply,
-        name="multiply",
-        description="multiply numbers",
-        args_schema=CalculatorInput,
-    )
-
-    @tool("date_today-tool")
-    def date_today() -> str:
-        "Returns today's date in YYYY-MM-DD format"
-        return datetime.today().date().strftime("%Y-%m-%d")    
-
-    def date_difference(date1: date, date2: date) -> int:
-        "The number of months date1 is before date2"
-        month_difference = (date2.year - date1.year) * 12 + date2.month - date1.month
-        return month_difference
-
-    class dates(BaseModel):
-        date1: date = Field(description="first date in YYYY-MM-DD format")
-        date2: date = Field(description="second date in YYYY-MM-DD format")
-
-    date_difference_tool = StructuredTool.from_function(
-        func=date_difference,
-        name="date_difference",
-        description="Calculate the number of months between two dates. Returns an integer.",
-        args_schema=dates,
-    )
-
-    class date_class(BaseModel):
-        date: str = Field(description="A date string in the format YYYY-MM-DD")    
-
-    @tool("date_convert-tool", args_schema=date_class)
-    def date_convert(date: str) -> str:
-        "Converts a date string to a standardized date format YYYY-MM-DD"
-        try:
-            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
-            return parsed_date.strftime("%Y-%m-%d")
-        except ValueError:
-            return "Invalid date format. Please use YYYY-MM-DD."
-
-    @tool("date_split-tool", args_schema=date_class)
-    def date_split(date: str) -> str:
-        "Extracts the year and month from a date string in YYYY-MM-DD format"
-        try:
-            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
-            year = parsed_date.year
-            month = parsed_date.month
-            return f'year: {year}, month: {month}'
-        except ValueError:
-            return "Invalid date format. Please use YYYY-MM-DD."
-
-    @tool("number_comparison-tool", args_schema=CalculatorInput)
-    def number_compare(num1: float, num2: float) -> str:
-        "Determines if first number is less than the second number"
-        result = num1 < num2
-        return f"Is {num1} less than {num2}? {result}"
-
-    class DateFromTodayInput(BaseModel):
+    # Simplified date input schema
+    class DateInput(BaseModel):
         past_date: str = Field(description="A past date in YYYY-MM-DD format")
-        threshold_months: float = Field(description="Number of months to compare against")
+        threshold_months: int = Field(description="Number of months to compare against")
 
-    @tool("months_since_date-tool", args_schema=DateFromTodayInput)
-    def months_since_date(past_date: str, threshold_months: float) -> str:
-        "Calculate months between a past date and today, and compare to threshold"
+    @tool("get_today_date", return_direct=False)
+    def get_today_date() -> str:
+        """Returns today's date in YYYY-MM-DD format."""
+        return datetime.today().date().strftime("%Y-%m-%d")
+
+    @tool("check_months_since_date", args_schema=DateInput, return_direct=False)
+    def check_months_since_date(past_date: str, threshold_months: int) -> str:
+        """Calculate months between a past date and today, and check if within threshold."""
         try:
             today = datetime.today().date()
             parsed_date = datetime.strptime(past_date, "%Y-%m-%d").date()
             months_diff = (today.year - parsed_date.year) * 12 + today.month - parsed_date.month
-            is_within_threshold = months_diff < threshold_months
-            return f"Months since {past_date}: {months_diff}. Is within {threshold_months} months? {is_within_threshold}"
+            is_within_threshold = months_diff <= threshold_months
+            return f"Months since {past_date}: {months_diff}. Within {threshold_months} months: {is_within_threshold}"
         except ValueError:
-            return "Invalid date format. Please use YYYY-MM-DD."
+            return f"Invalid date format: {past_date}. Please use YYYY-MM-DD."
 
-    tools = [multiply_tool, date_today, date_difference_tool, date_split, number_compare, months_since_date]
+    # Simple number comparison
+    class NumberInput(BaseModel):
+        num1: float = Field(description="First number")
+        num2: float = Field(description="Second number")
 
-    tool_names=", ".join([tool.name for tool in tools])
+    @tool("compare_numbers", args_schema=NumberInput, return_direct=False)
+    def compare_numbers(num1: float, num2: float) -> str:
+        """Compare if first number is less than second number."""
+        result = num1 < num2
+        return f"Is {num1} less than {num2}? {result}"
 
-    system_message = f"""
-    You are a Principal Investigator (PI) for evaluating patients for clinical trials.
-    You are asked to compare the patient profile document to the institution policy questions.
-    You must determine if the patient is eligible based on the following documents.
+    # Keep only the essential tools
+    tools = [get_today_date, check_months_since_date, compare_numbers]
+    tool_names = ", ".join([tool.name for tool in tools])
 
-    \n #### Here is the patient profile document: \n {patient_profile}\n\n
+    system_message = f"""You are a Principal Investigator (PI) evaluating patients for clinical trials.
+Compare the patient profile to the policy questions and determine eligibility.
 
-    If the answer to any policy question is yes, then the patient is not eligible.\n
-    If the answer to the question is not provided in the patient profile, answer 'no'.\n
+PATIENT PROFILE:
+{patient_profile}
 
-    Give a binary 'yes' or 'no' score in the response to indicate whether the patient is eligible according to the given policy ONLY.
-    If the patient is not eligible then also include the reason in your response.
+EVALUATION RULES:
+- If ANY policy question answer is "yes", the patient is NOT eligible
+- If information is missing from the profile, answer "no" to that question
+- Give a final binary 'yes' or 'no' for patient eligibility
+- If not eligible, include the specific reason
 
-    IMPORTANT TOOL USAGE RULES:
-    1. Use tools one at a time - DO NOT nest function calls
-    2. Wait for the result of one tool before calling another
-    3. If you need today's date, call date_today-tool first
-    4. If you need to calculate date differences, call the tools in sequence, not nested
-    5. Always use the actual returned values from tools, not the function calls themselves
-    6. For date comparisons, use months_since_date-tool which handles the complete calculation
+TOOLS AVAILABLE:
+- get_today_date: Get current date
+- check_months_since_date: Check if event was within X months of today
+- compare_numbers: Compare two numbers
 
-    EXAMPLE USAGE:
-    - To check if a patient had surgery within 12 months: use months_since_date-tool with the surgery date and 12
-    - To get today's date: use date_today-tool
-    - To compare numbers: use number_comparison-tool with actual numbers
+TOOL USAGE:
+- Use ONE tool at a time
+- Wait for results before using another tool
+- Use actual dates from the patient profile
+- For date checks: call check_months_since_date with the specific date and month threshold
 
-    You have access to the following tools:
-    {tool_names}
-    """
+Available tools: {tool_names}
+"""
 
-    user_message_content = f""" Here are the policy questions: \n{policy_qs}"""
-    messages = [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": user_message_content}
-    ]
-
-    react_agent = create_react_agent(model_agent, tools, debug=False)    
-    messages = react_agent.invoke({"messages": messages})    
-    result = messages["messages"][-1].content    
-    return result
+    user_message_content = f"Policy Questions to Evaluate:\n{policy_qs}"
+    
+    # Use simpler message format that works better with Groq
+    try:
+        react_agent = create_react_agent(model_agent, tools, debug=False)
+        response = react_agent.invoke({
+            "messages": [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message_content}
+            ]
+        })
+        result = response["messages"][-1].content
+        return result
+    except Exception as e:
+        print(f"Error in policy_tools: {e}")
+        # Fallback: evaluate without tools
+        fallback_prompt = f"""
+        As a Principal Investigator, evaluate this patient's eligibility:
+        
+        Patient Profile: {patient_profile}
+        
+        Policy Questions: {policy_qs}
+        
+        Answer with 'yes' if eligible, 'no' if not eligible, and include reasoning.
+        """
+        
+        try:
+            response = model_agent.invoke([{"role": "user", "content": fallback_prompt}])
+            return response.content
+        except Exception as fallback_error:
+            print(f"Fallback also failed: {fallback_error}")
+            return "Error: Unable to evaluate policy. Patient marked as not eligible for safety."
 
 def create_workflow_builder(agent_state: AgentState) -> StateGraph:
     """
@@ -806,7 +775,7 @@ def patient_collector_node(state: AgentState) -> dict:
 Based on the following request identify and return the patient's ID number.
 """
 
-        response = config.model.with_structured_output(Patient_ID).invoke([
+        response = config.model_tool.with_structured_output(Patient_ID).invoke([
             SystemMessage(content=patient_data_prompt),
             HumanMessage(content=state['patient_prompt'])
         ])
@@ -1434,10 +1403,10 @@ def grade_trials_node(state: AgentState) -> dict:
         )
         
         # Create chains
-        llm_with_tool = config.model.with_structured_output(grade)
+        llm_with_tool = config.model_tool.with_structured_output(grade)
         retrieval_grader = prompt_grader | llm_with_tool
         
-        llm_with_tool_hallucination = config.model.with_structured_output(GradeHallucinations)
+        llm_with_tool_hallucination = config.model_tool.with_structured_output(GradeHallucinations)
         hallucination_grader = hallucination_prompt | llm_with_tool_hallucination
         
         # Score each trial
