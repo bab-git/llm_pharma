@@ -578,22 +578,50 @@ Your options:
         with gr.Blocks(
             theme=gr.themes.Default(spacing_size='sm', text_size="lg"),
             css="""
-            .main-container, .gradio-container {
-                max-width: 1200px !important;
-                margin: 0 auto !important;
-                padding: 20px !important;
+            /* Darker background for the entire profile section */
+            #profile-section {
+                background-color: #2a3f54;  /* a deep slate blue */
+                padding: 15px;
+                border-radius: 8px;
+                margin-bottom: 20px;
             }
-            .gradio-container, .main-container, body, html {
-                font-size: 22px !important;
-            }
-            .gr-textbox label, .gr-textbox textarea {
-                font-size: 22px !important;
-            }
-            /* Make Start Evaluation and Continue Evaluation button text smaller */
-            button:has(span:contains('Start Evaluation')), button:has(span:contains('Continue Evaluation')) {
-                font-size: 13px !important;
-                min-width: 180px !important;
-            }
+
+              /* target by ID */
+              #notification_center textarea {
+                  background-color: #b3d1ea;   /* less light, medium blue */
+                  border: 2px solid #4a90e2;
+                  color: #333;
+                  font-size: 22px !important;
+              }
+              .main-container, .gradio-container {
+                  max-width: 1200px !important;
+                  margin: 0 auto !important;
+                  padding: 20px !important;
+              }
+              .gradio-container, .main-container, body, html {
+                  font-size: 22px !important;
+              }
+              .gr-textbox label, .gr-textbox textarea {
+                  font-size: 22px !important;
+              }
+              /* Make the font of the profile textbox bigger */
+              #profile-section textarea {
+                 font-size: 20px !important;
+              }
+              /* Add a background for the Policy Conflict Resolution section */
+              #policy-conflict-section {
+                  background-color: #4B0000; /* very dark red */
+                  padding: 15px;
+                  border-radius: 8px;
+                  margin-bottom: 20px;
+              }
+              /* Add a background for the Trials Summary section */
+              #trials-summary-section {
+                  background-color: #1a4d1a; /* dark green */
+                  padding: 15px;
+                  border-radius: 8px;
+                  margin-bottom: 20px;
+              }
             """
         ) as demo:
             
@@ -740,7 +768,8 @@ Your options:
                         lines=4,
                         interactive=False,
                         visible=True,
-                        scale=3
+                        scale=3,
+                        elem_id="notification_center"
                     )
                 
                 # Add processing indicator
@@ -780,7 +809,7 @@ Your options:
                 # NEW SECTION: Add the four requested components
                 with gr.Accordion("", open=True):
                     # 1. Patient Profile Display
-                    with gr.Row():
+                    with gr.Row(elem_id="profile-section"):
                         with gr.Column(scale=3):
                             profile_title = gr.Markdown(
                                 value="## 📋 Current Patient Profile",
@@ -795,7 +824,7 @@ Your options:
                             )
                         with gr.Column(scale=1):
                             modify_profile_btn = gr.Button("✏️ Modify Profile", min_width=120)
-                    with gr.Row():
+                    with gr.Row(elem_id="profile-section"):
                         current_profile = gr.Textbox(
                             label="",
                             lines=5,
@@ -803,47 +832,45 @@ Your options:
                             placeholder="Patient profile will appear here after evaluation starts..."
                         )
                     
-                    # 2. Policy Conflict Resolution
-                    policy_title = gr.Markdown(
-                        value="## ⚠️ Policy Conflict Resolution",
-                        visible=True
-                    )
-
-                    with gr.Row():
-                        with gr.Column(scale=3):
-                            policy_conflict_info = gr.Markdown(
-                                value="""**🚨 Policy Conflict Detected**
+                    # 2. Policy Conflict Resolution (entire section in one container)
+                    with gr.Column(elem_id="policy-conflict-section"):
+                        with gr.Row():
+                            with gr.Column(scale=3):
+                                policy_title = gr.Markdown(
+                                    value="## ⚠️ Policy Conflict Resolution",
+                                    visible=True
+                                )
+                                policy_conflict_info = gr.Markdown(
+                                    value="""**🚨 Policy Conflict Detected**
 
 - **⏭️ Skip if this policy is not relevant**
 - **🔧 Modify patient profile if needed**
 - **⏭️⏭️ Skip all policy checks for the patient**""",
-                                visible=False
-                            )
-                        with gr.Column(scale=1):
-                            policy_skip_btn = gr.Button("⏭️ Skip Policy", min_width=120)
-                            policy_big_skip_btn = gr.Button("⏭️ Skip All Policies", min_width=140)
-                    
-                    with gr.Row():
-                        # Left column: Current Policies
-                        with gr.Column(scale=1):
-                            current_policies = gr.Textbox(
-                                label="📜 Policies Related to the Patient", 
-                                lines=15,
-                                interactive=False,
-                                placeholder="Current policies will appear here after policy search..."
-                            )
-                        
-                        # Right column: Policy Issues
-                        with gr.Column(scale=1):
-                            policy_status = gr.Textbox(
-                                label="⚠️ Policy Issues & Conflicts", 
-                                lines=4,
-                                interactive=False,
-                                placeholder="Policy issues will appear here when conflicts are detected..."
-                            )
+                                    visible=False
+                                )
+                            with gr.Column(scale=1):
+                                policy_skip_btn = gr.Button("⏭️ Skip Policy", min_width=120)
+                                policy_big_skip_btn = gr.Button("⏭️ Skip All Policies", min_width=140)
+                        with gr.Row():
+                            # Left column: Current Policies
+                            with gr.Column(scale=1):
+                                current_policies = gr.Textbox(
+                                    label="📜 Policies Related to the Patient", 
+                                    lines=15,
+                                    interactive=False,
+                                    placeholder="Current policies will appear here after policy search..."
+                                )
+                            # Right column: Policy Issues
+                            with gr.Column(scale=1):
+                                policy_status = gr.Textbox(
+                                    label="⚠️ Policy Issues & Conflicts", 
+                                    lines=4,
+                                    interactive=False,
+                                    placeholder="Policy issues will appear here when conflicts are detected..."
+                                )
                     
                     # 3. Trials Summary Table
-                    with gr.Column():
+                    with gr.Column(elem_id="trials-summary-section"):
                         trials_summary_heading = gr.Markdown(
                             value="""## 🎯 Trials Summary (NCT ID | Diseases | Relevance)
 
