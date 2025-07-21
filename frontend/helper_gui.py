@@ -827,9 +827,14 @@ Your options:
                             )
                     
                     # 3. Trials Summary Table
-                    with gr.Row():
+                    with gr.Column():
+                        trials_summary_heading = gr.Markdown(
+                            value="""## 🎯 Trials Summary (NCT ID | Diseases | Relevance)
+
+You can obtain more information about each trial's details and possible relevance reasons in the **Potential Trials** and **Trials Scores** tabs."""
+                        )
                         trials_summary = gr.Dataframe(
-                            label="🎯 Trials Summary (NCT ID | Diseases | Relevance)",
+                            label="",
                             headers=["nctid", "diseases", "relevance"],
                             interactive=False,
                             wrap=True
@@ -1017,80 +1022,7 @@ Your options:
         
                                               
 
-            with gr.Tab("Relevant Policies"):
-                # Add informative text at the top of the Policies tab
-                policies_info = gr.Markdown(
-                    value="""## 📜 Trial Policies Review
 
-**🔍 View retrieved policies** based on the patient's profile.
-
-**When to use this tab:**
-- **✅ Check policy requirements** that may affect trial eligibility
-- **📖 Review detailed policy content** for better understanding
-- **🔄 Refresh** to get the latest policy information
-
-**Next steps:**
-- If policies seem restrictive → Check **'Policy Issue'** tab
-- If policies look compatible → Proceed to **'Matched Trials'** tab""",
-                    visible=True
-                )
-                
-                refresh_btn = gr.Button("Refresh")
-                policies_bx = gr.Textbox(label="Retieved participation policies based on patient's profile", lines=40)
-                refresh_btn.click(fn=self.get_content, inputs=gr.Number("policies", visible=False), outputs=policies_bx)
-
-            with gr.Tab("Policy Issue"):
-                # Add informative text at the top of the Policy Issue tab
-                policy_issue_info = gr.Markdown(
-                    value="""## ⚠️ Policy Conflict Resolution
-
-**🚨 When you see this tab highlighted** - There's a policy conflict that needs attention.
-
-**Your options:**
-1. **🔄 Refresh** to review the specific policy issue
-2. **⏭️ Skip the policy** if it's not applicable to this patient
-3. **🔙 Go back to 'Profile' tab** to modify patient information
-
-**When to skip:**
-- Policy doesn't apply to patient's condition
-- Policy is outdated or incorrectly matched
-- Manual review determines patient should proceed
-
-**💡 Alternative:** Modify the patient profile to better match policies.""",
-                    visible=True
-                )
-                
-                with gr.Row():
-                    refresh_btn = gr.Button("Refresh")
-                    skip_btn = gr.Button("Skip this conflicting policy")
-                    big_skip_btn = gr.Button("Skip whole policy check stage")
-                policy_issue_bx = gr.Textbox(label="Policy Issue", lines=10, interactive=False)
-                
-                def skip_policy_and_notify():
-                    """Skip the current policy and show confirmation message"""
-                    # Skip the policy in the state
-                    self.modify_state("policy_skip", self.SENTINEL_NONE, "")
-                    # Return confirmation message
-                    return gr.update(
-                        label="Policy Skipped", 
-                        value="The current policy is skipped for this patient.\n\nPlease continue evaluation of remaining policies in the Agent tab."
-                    )
-
-                def big_skip_policy_and_notify():
-                    """Skip the whole policy check and show confirmation message"""
-                    # Skip the policy in the state
-                    self.modify_state("policy_big_skip", self.SENTINEL_NONE, "")
-                    # Return confirmation message
-                    return gr.update(
-                        label="Policy Skipped", 
-                        value="✅ The 'policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches, via the Agent tab."
-                    )
-
-                refresh_btn.click(fn=self.get_issue_policy, inputs=None, outputs=policy_issue_bx)
-                skip_btn.click(fn=skip_policy_and_notify, inputs=None, outputs=policy_issue_bx).then(
-                                fn=updt_disp, inputs=None, outputs=sdisps)
-                big_skip_btn.click(fn=big_skip_policy_and_notify, inputs=None, outputs=policy_issue_bx).then(
-                                fn=updt_disp, inputs=None, outputs=sdisps)
                 
 
             with gr.Tab("Potential Trials"):
