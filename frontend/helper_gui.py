@@ -669,31 +669,42 @@ Your options:
                 return(gr.update(variant=stat))
             
             with gr.Tab("Agent"):
-                # Concise agent tab explanation
-                agent_info = gr.Markdown(
-                    value="""## 🤖 Agent Control Center
+                # Concise agent tab explanation with two columns
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        agent_info_left = gr.Markdown(
+                            value="""## 🤖 Agent Control Center
 
 **Start Here:**
 - ➡️ **Enter Patient Query**
 - ➡️ **Click 'Start Evaluation'**
 - ➡️ **Monitor Progress via Notifications**
 
-**Process Overview:**
-- 🔍 **Profile Creation:** Generate a patient profile
-- ⚠️ **Policy Check:** Identify and resolve conflicting clinical policies
-- 🔄 **Trial Matching:** Find potential clinical trial matches
-- 🎯 **Trial Relevance:** Determine relevant trials for the patient
-
 **Tips:**
 - 💡 **Follow Notifications:** They guide you through each step
 - 💡 **Use 'Manage Agent'** for advanced options and configurations
 """,
-                    visible=True
-                )
+                            visible=True
+                        )
+                    with gr.Column(scale=1):
+                        agent_info_right = gr.Markdown(
+                            value="""## Process Overview:
+
+- 🔍 **Profile Creation:** Generate a patient profile
+- ⚠️ **Policy Check:** Identify and resolve conflicting clinical policies
+- 🔄 **Trial Matching:** Find potential clinical trial matches
+- 🎯 **Trial Relevance:** Determine relevant trials for the patient
+""",
+                            visible=True
+                        )
                 
                 with gr.Row():
                     with gr.Column(scale=2):
-                        prompt_bx = gr.Textbox(label="Prompt about patient", value="Is patient_ID 56 eligible for any medical trial?")
+                        prompt_bx = gr.Textbox(
+                            label="Prompt about patient", 
+                            value="Is patient_ID 56 eligible for any medical trial?",
+                            lines=3,
+                        )
                     with gr.Column(scale=1):
                         patient_id_dropdown = gr.Dropdown(
                             choices=[f"Patient {i}" for i in range(1, 100)],
@@ -701,12 +712,12 @@ Your options:
                             value="Patient 56",
                             interactive=True
                         )
-                        model_dropdown = gr.Dropdown(
-                            choices=[display_name for _, display_name, _ in self.get_groq_models()],
-                            label="🤖 Select AI Model",
-                            value="🦙 Llama 3.3 70B Versatile (Best)",
-                            interactive=True
-                        )
+                        # model_dropdown = gr.Dropdown(
+                        #     choices=[display_name for _, display_name, _ in self.get_groq_models()],
+                        #     label="🤖 Select AI Model",
+                        #     value="🦙 Llama 3.3 70B Versatile (Best)",
+                        #     interactive=True
+                        # )
                     tab_notification = gr.Textbox(
                         value="Ready to start agent evaluation",
                         label="🔔 Your Next Action 🔔",
@@ -998,11 +1009,11 @@ Your options:
                 )
                 
                 # Wire up the model dropdown to update the selected model
-                model_dropdown.change(
-                    fn=update_selected_model,
-                    inputs=[model_dropdown],
-                    outputs=[tab_notification]
-                )
+                # model_dropdown.change(
+                #     fn=update_selected_model,
+                #     inputs=[model_dropdown],
+                #     outputs=[tab_notification]
+                # )
         
                                               
 
