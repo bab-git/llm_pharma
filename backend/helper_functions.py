@@ -127,8 +127,8 @@ _ = load_dotenv(find_dotenv()) # read local .env file
 # from langchain_community.vectorstores import Chroma
 # from langchain_nomic import NomicEmbeddings
 # import chromadb
-# from langchain.chains.query_constructor.base import AttributeInfo
-# from langchain.retrievers.self_query.base import SelfQueryRetriever
+from langchain.chains.query_constructor.base import AttributeInfo
+from langchain.retrievers.self_query.base import SelfQueryRetriever
 from backend.my_agent.llm_manager import LLMManager
 from backend.my_agent.database_manager import DatabaseManager
 
@@ -176,26 +176,10 @@ class GradeHallucinations(BaseModel):
     Reason: str = Field(description="Reasons to the given relevance score.")
 
 # Helper to get default LLMManagers for completions and tool calls
+# This function is now deprecated - use LLMManager.get_default_managers() instead
 def get_default_llm_managers():
-    # You can customize these lists independently if needed
-    model_list = [
-        # ("meta-llama/llama-4-maverick-17b-128e-instruct", "groq"), # Slow
-        # ("meta-llama/llama-4-scout-17b-16e-instruct", "groq"), # Slow
-        ("mistral-saba-24b", "groq"),
-        # ("llama3-8b-8192", "groq"),
-    ]
-    tool_model_list = [
-        # ("llama-3.3-70b-versatile", "groq"), # Slow
-        # ("llama3-70b-8192", "groq"), # Slow        
-        # ("deepseek-r1-distill-llama-70b", "groq"), # Slow
-        # ("moonshotai/kimi-k2-instruct", "groq"),
-        ("qwen/qwen3-32b", "groq"), # fast
-        # ("gemma2-9b-it", "groq"), # tool fails
-        # ("llama-3.1-8b-instant", "groq"), # tool fails
-        # ("llama3-8b-8192", "groq"), # tool fails
-        # ("gpt-3.5-turbo", "openai"),
-    ]
-    return LLMManager(model_list), LLMManager(tool_model_list)
+    from .my_agent.llm_manager import LLMManager
+    return LLMManager.get_default_managers()
 
 class PatientCollectorConfig:
     """Configuration for patient collector node."""
@@ -399,86 +383,8 @@ Available tools: {tool_names}
             print(f"Fallback also failed: {fallback_error}")
             return "Error: Unable to evaluate policy. Patient marked as not eligible for safety."
 
-def create_workflow_builder(agent_state: AgentState) -> StateGraph:
-    """
-    Create the workflow builder with all nodes and edges for the LLM Pharma system.
-    
-    Args:
-        agent_state: The agent state definition
-        
-    Returns:
-        StateGraph: The configured workflow graph
-    """
-    # Create the state graph
-    builder = StateGraph(AgentState)
-    
-    # Set entry point
-    builder.set_entry_point("patient_collector")
-    
-    # Add nodes (placeholder implementations)
-    builder.add_node("patient_collector", patient_collector_node)
-    builder.add_node("policy_search", policy_search_node)
-    builder.add_node("policy_evaluator", policy_evaluator_node)
-    builder.add_node("trial_search", trial_search_node)
-    builder.add_node("grade_trials", grade_trials_node)
-    builder.add_node("profile_rewriter", profile_rewriter_node)
-    
-    # Add conditional edges
-    builder.add_conditional_edges(
-        "patient_collector", 
-        should_continue_patient, 
-        {
-            END: END,
-            "policy_search": "policy_search"
-        }
-    )
-    
-    builder.add_conditional_edges(
-        "policy_evaluator", 
-        should_continue_policy, 
-        {
-            "trial_search": "trial_search",
-            "policy_evaluator": "policy_evaluator",
-            END: END
-        }
-    )
-    
-    builder.add_conditional_edges(
-        "trial_search", 
-        should_continue_trial_search, 
-        {
-            "grade_trials": "grade_trials",
-            # "profile_rewriter": "profile_rewriter",
-            END: END
-        }
-    )
-
-    builder.add_edge("policy_search", "policy_evaluator")
-    # builder.add_edge("trial_search", "grade_trials")
-    builder.add_edge("profile_rewriter", "trial_search")
-    
-    builder.add_conditional_edges(
-        "grade_trials", 
-        should_continue_trials, 
-        {
-            "profile_rewriter": "profile_rewriter",
-            END: END
-        }
-    )
-    
-    return builder
-
-def setup_sqlite_memory() -> SqliteSaver:
-    """
-    Setup SQLite memory for checkpointing the workflow state.
-    
-    Returns:
-        SqliteSaver: Configured SQLite saver for state persistence
-    """
-    # Create in-memory SQLite connection for checkpoints
-    conn = sqlite3.connect(":memory:", check_same_thread=False)
-    memory = SqliteSaver(conn)
-    return memory
+# Workflow creation functions moved to WorkflowManager class
+# Use WorkflowManager() instead of these functions
 
 
 

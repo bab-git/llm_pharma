@@ -29,29 +29,29 @@ def make_absolute(relative: str) -> Path:
     return p if p.is_absolute() else Path(__file__).parent.parent / p
 
 
-def create_workflow(demo: bool):
+def create_workflow_manager(demo: bool):
     """
-    Build and return the LangGraph workflow graph (demo or production).
+    Build and return the WorkflowManager (demo or production).
     """
     if demo:
         from demo_graph import create_demo_graph
+        # Demo returns a compiled graph directly, not a WorkflowManager
         return create_demo_graph()
 
-    from backend.helper_functions import (
-        create_agent_state,
-        create_workflow_builder,
-        setup_sqlite_memory
-    )
-    state = create_agent_state()
-    builder = create_workflow_builder(state)
-    memory = setup_sqlite_memory()
-    return builder.compile(
-        checkpointer=memory,
-        interrupt_after=[
-            'patient_collector', 'policy_search', 'policy_evaluator',
-            'trial_search', 'grade_trials', 'profile_rewriter'
-        ]
-    )
+    # Import here to avoid circular imports
+    import sys
+    import os
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    
+    from backend.my_agent.workflow_manager import WorkflowManager
+    from backend.my_agent.llm_manager import LLMManager
+    
+    # Create LLM managers
+    llm_manager, llm_manager_tool = LLMManager.get_default_managers()
+    
+    # Create and return workflow manager
+    workflow_manager = WorkflowManager(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
+    return workflow_manager
 
 
 def main():
@@ -77,13 +77,13 @@ def main():
     trials_csv = make_absolute("data/trials_data.csv")
     ensure_path_exists(trials_csv, db_manager.create_trials_dataset, status='recruiting')
 
-    # Build workflow graph
-    graph = create_workflow(demo=args.demo)
-    if not graph:
-        sys.exit("❌ Failed to create workflow graph. Try --demo for testing.")
+    # Build workflow manager
+    workflow_manager = create_workflow_manager(demo=args.demo)
+    if not workflow_manager:
+        sys.exit("❌ Failed to create workflow manager. Try --demo for testing.")
 
-    # Launch Gradio dashboard
-    app = trials_gui(graph, share=args.share)
+    # Launch Gradio dashboard with workflow manager
+    app = trials_gui(workflow_manager, share=args.share)
     app.launch(share=args.share)
 
 

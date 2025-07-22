@@ -21,8 +21,17 @@ class trials_gui():
 
 **How it works:** The system uses a multi-stage evaluation process to assess patient compatibility with available clinical trials, ensuring both patient safety and trial requirements are met."""
 
-    def __init__(self, graph, share=False):
-        self.graph = graph
+    def __init__(self, workflow_manager_or_graph, share=False):
+        # Handle both WorkflowManager and compiled graph
+        if hasattr(workflow_manager_or_graph, 'app'):
+            # It's a WorkflowManager
+            self.workflow_manager = workflow_manager_or_graph
+            self.graph = workflow_manager_or_graph.app
+        else:
+            # It's a compiled graph (demo mode)
+            self.workflow_manager = None
+            self.graph = workflow_manager_or_graph
+        
         self.share = share
         self.partial_message = ""
         self.response = {}
@@ -786,7 +795,14 @@ You can obtain more information about each trial's details and possible relevanc
             config = None
         self.thread = {"configurable": {"thread_id": str(self.thread_id)}}
         while self.iterations[self.thread_id] < self.max_iterations:
-            self.response = self.graph.invoke(config, self.thread)
+            # Use graph for execution (works for both WorkflowManager and demo)
+            if config:
+                # Initial run with config
+                self.response = self.graph.invoke(config, self.thread)
+            else:
+                # Continue execution
+                self.response = self.graph.invoke(None, self.thread)
+            
             self.iterations[self.thread_id] += 1
             self.partial_message += str(self.response)
             self.partial_message += f"\n {'='*40}\n\n"
