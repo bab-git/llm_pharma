@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from .database_manager import DatabaseManager
 from .llm_manager import LLMManager
-from .patient_collector import AgentState, PatientCollectorConfig
+from .patient_collector import AgentState
 
 
 # --- Structured Output Schemas ---
@@ -55,16 +55,17 @@ def get_default_llm_managers():
 
 # --- Trial Search Node ---
 def trial_search_node(state: AgentState, config: Optional[DictConfig] = None) -> dict:
+    config = None
     try:
         if config is not None:
             llm_manager, llm_manager_tool = get_default_llm_managers()
-            collector_config = PatientCollectorConfig.from_config(config)
+            # collector_config = PatientCollectorConfig.from_config(config)
             db_manager = DatabaseManager(config=config)
         else:
             llm_manager, llm_manager_tool = get_default_llm_managers()
-            collector_config = PatientCollectorConfig(
-                llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-            )
+            # collector_config = PatientCollectorConfig(
+            #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
+            # )
             db_manager = DatabaseManager()
         patient_profile = state.get("patient_profile", "")
         if not patient_profile:
@@ -154,9 +155,9 @@ def grade_trials_node(state: AgentState) -> dict:
                 "policy_eligible": state.get("policy_eligible", False),
             }
         llm_manager, llm_manager_tool = get_default_llm_managers()
-        config = PatientCollectorConfig(
-            llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        )
+        # config = PatientCollectorConfig(
+        #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
+        # )
         relevant_trials = []
         for trial in trials:
             doc_txt = trial.page_content
