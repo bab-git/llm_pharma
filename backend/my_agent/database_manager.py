@@ -72,6 +72,8 @@ from langchain_nomic import NomicEmbeddings
 from langchain.chains.query_constructor.base import AttributeInfo
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 import chromadb
+import hydra
+from omegaconf import DictConfig
 
 
 class DatabaseManager:
@@ -79,12 +81,13 @@ class DatabaseManager:
     Manages all database and vector store operations for the LLM Pharma system.
     """
     
-    def __init__(self, project_root: Optional[str] = None):
+    def __init__(self, project_root: Optional[str] = None, config: Optional[DictConfig] = None):
         """
         Initialize the DatabaseManager.
         
         Args:
             project_root: Path to the project root directory. If None, will be inferred.
+            config: Optional Hydra config for overriding paths
         """
         if project_root is None:
             # Infer project root from current file location
@@ -92,14 +95,22 @@ class DatabaseManager:
             self.project_root = os.path.dirname(os.path.dirname(current_dir))
         else:
             self.project_root = project_root
+        # If config is provided, use it for paths
+        if config is not None:
+            dirs = config.directories
+            files = config.files
+            self.default_db_path = os.path.join(self.project_root, dirs.sql_server, "patients.db")
+            self.default_vectorstore_path = os.path.join(self.project_root, dirs.vector_store)
+            self.default_policy_path = os.path.join(self.project_root, files.policy_markdown)
+            self.default_trials_path = os.path.join(self.project_root, files.trials_csv)
+            self.default_disease_mapping_path = os.path.join(self.project_root, files.disease_mapping)
+        else:
+            self.default_db_path = os.path.join(self.project_root, "sql_server", "patients.db")
+            self.default_vectorstore_path = os.path.join(self.project_root, "vector_store")
+            self.default_policy_path = os.path.join(self.project_root, "source_data", "instut_trials_policy.md")
+            self.default_trials_path = os.path.join(self.project_root, "data", "trials_data.csv")
+            self.default_disease_mapping_path = os.path.join(self.project_root, "source_data", "disease_mapping.json")
             
-        # Default paths
-        self.default_db_path = os.path.join(self.project_root, "sql_server", "patients.db")
-        self.default_vectorstore_path = os.path.join(self.project_root, "vector_store")
-        self.default_policy_path = os.path.join(self.project_root, "source_data", "instut_trials_policy.md")
-        self.default_trials_path = os.path.join(self.project_root, "data", "trials_data.csv")
-        self.default_disease_mapping_path = os.path.join(self.project_root, "source_data", "disease_mapping.json")
-        
     def _ensure_directory(self, path: str) -> None:
         """Ensure directory exists for the given path."""
         os.makedirs(os.path.dirname(path), exist_ok=True)

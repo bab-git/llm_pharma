@@ -2,6 +2,8 @@ from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from typing import List, Optional, Callable, Any, Tuple
 import logging
+import hydra
+from omegaconf import DictConfig
 
 class LLMManager:
     """
@@ -52,6 +54,21 @@ class LLMManager:
             # ("gpt-3.5-turbo", "openai"),
         ]
         return cls(model_list), cls(tool_model_list)
+
+    @classmethod
+    def from_config(cls, config: DictConfig, use_tool_models: bool = False) -> 'LLMManager':
+        """
+        Create an LLMManager from a Hydra config DictConfig.
+        Args:
+            config: The loaded config (from Hydra)
+            use_tool_models: If True, use tool_models, else agent_models
+        Returns:
+            LLMManager instance
+        """
+        models = config.models.tool_models if use_tool_models else config.models.agent_models
+        temperature = config.models.temperature if 'temperature' in config.models else 0.0
+        model_configs = [(m['id'], m['provider']) for m in models]
+        return cls(model_configs, temperature=temperature)
 
     def _build_clients(self):
         self.clients = []

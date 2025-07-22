@@ -50,7 +50,7 @@ USAGE EXAMPLE:
 from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.prebuilt import ToolNode
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 from typing_extensions import TypedDict
 from langgraph.graph.message import AnyMessage, add_messages
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
@@ -90,6 +90,9 @@ from .patient_collector import (
     AgentState
 )
 
+import hydra
+from omegaconf import DictConfig
+
 
 class PolicyEligibility(BaseModel):
     """Give the patient's eligibility result."""
@@ -117,22 +120,37 @@ class PolicyService:
     tool calls, and final yes/no eligibility decisions.
     """
     
-    def __init__(self, llm_manager=None, llm_manager_tool=None):
+    def __init__(self, llm_manager=None, llm_manager_tool=None, config: Optional[DictConfig] = None):
         """
         Initialize the PolicyService.
-        
         Args:
             llm_manager: LLM manager for completions (optional, will create default if not provided)
             llm_manager_tool: LLM manager for tool calls (optional, will create default if not provided)
+            config: Optional Hydra config for models and paths
         """
-        if llm_manager is None or llm_manager_tool is None:
-            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
+        if config is not None:
+            if llm_manager is None:
+                from .llm_manager import LLMManager
+                llm_manager = LLMManager.from_config(config, use_tool_models=False)
+            if llm_manager_tool is None:
+                from .llm_manager import LLMManager
+                llm_manager_tool = LLMManager.from_config(config, use_tool_models=True)
+            self.db_manager = DatabaseManager(config=config)
         else:
+            if llm_manager is None or llm_manager_tool is None:
+                self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
+            else:
+                self.llm_manager = llm_manager
+                self.llm_manager_tool = llm_manager_tool
+            self.db_manager = DatabaseManager()
+        if config is not None:
             self.llm_manager = llm_manager
             self.llm_manager_tool = llm_manager_tool
-        
-        self.db_manager = DatabaseManager()
     
+    @classmethod
+    def from_config(cls, config: DictConfig) -> 'PolicyService':
+        return cls(config=config)
+
     def policy_tools(self, policy_qs: str, patient_profile: str, model_agent=None, llm_manager_tool=None):
         """
         Policy evaluation tools for clinical trial eligibility assessment.
@@ -427,8 +445,9 @@ Available tools: {tool_names}
 
 
 # Standalone functions for backward compatibility
-def get_default_policy_service():
-    """Get a PolicyService instance with default LLM managers."""
+def get_default_policy_service(config: Optional[DictConfig] = None):
+    if config is not None:
+        return PolicyService.from_config(config)
     return PolicyService()
 
 def policy_search_node(state: AgentState) -> dict:

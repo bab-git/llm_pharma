@@ -5,8 +5,9 @@ Owns everything about matching a patient profile to trials and scoring relevance
 No leakage of DB or policy details.
 """
 
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, Field
+from omegaconf import DictConfig
 from langchain.chains.query_constructor.base import AttributeInfo
 from .llm_manager import LLMManager
 from .database_manager import DatabaseManager
@@ -47,10 +48,16 @@ def get_default_llm_managers():
     return LLMManager.get_default_managers()
 
 # --- Trial Search Node ---
-def trial_search_node(state: AgentState) -> dict:
+def trial_search_node(state: AgentState, config: Optional[DictConfig] = None) -> dict:
     try:
-        llm_manager, llm_manager_tool = get_default_llm_managers()
-        config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
+        if config is not None:
+            llm_manager, llm_manager_tool = get_default_llm_managers()
+            collector_config = PatientCollectorConfig.from_config(config)
+            db_manager = DatabaseManager(config=config)
+        else:
+            llm_manager, llm_manager_tool = get_default_llm_managers()
+            collector_config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
+            db_manager = DatabaseManager()
         patient_profile = state.get("patient_profile", "")
         if not patient_profile:
             print("⚠️ No patient profile available for trial search")
@@ -60,7 +67,6 @@ def trial_search_node(state: AgentState) -> dict:
                 'trial_searches': state.get('trial_searches', 0) + 1,
                 "policy_eligible": state.get("policy_eligible", False)
             }
-        db_manager = DatabaseManager()
         trial_vectorstore = db_manager.create_trial_vectorstore()
         print(f"Number of trials in the vector store: {trial_vectorstore._collection.count()}")
         metadata_field_info = [

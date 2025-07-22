@@ -57,10 +57,12 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from pydantic import BaseModel, Field
-from typing import TypedDict, List
+from typing import TypedDict, List, Optional
 import sqlite3
 import os
 from dotenv import load_dotenv, find_dotenv
+import hydra
+from omegaconf import DictConfig
 
 # Load environment variables
 _ = load_dotenv(find_dotenv())
@@ -135,13 +137,24 @@ def get_default_llm_managers():
 
 class PatientCollectorConfig:
     """Configuration for patient collector node."""
-    def __init__(self, llm_manager: LLMManager, llm_manager_tool: LLMManager = None, db_path="sql_server/patients.db"):
+    def __init__(self, llm_manager: LLMManager, llm_manager_tool: LLMManager = None, db_path="sql_server/patients.db", config: Optional[DictConfig] = None):
         self.llm_manager = llm_manager
         self.llm_manager_tool = llm_manager_tool or llm_manager
-        self.db_path = db_path
-        self.model = llm_manager.current
-        self.model_tool = self.llm_manager_tool.current
+        if config is not None:
+            self.db_path = os.path.join(config.directories.sql_server, "patients.db")
+            self.model = llm_manager.current
+            self.model_tool = self.llm_manager_tool.current
+        else:
+            self.db_path = db_path
+            self.model = llm_manager.current
+            self.model_tool = self.llm_manager_tool.current
         self._setup_profile_chain()
+    @classmethod
+    def from_config(cls, config: DictConfig) -> 'PatientCollectorConfig':
+        from .llm_manager import LLMManager
+        llm_manager = LLMManager.from_config(config, use_tool_models=False)
+        llm_manager_tool = LLMManager.from_config(config, use_tool_models=True)
+        return cls(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool, config=config)
 
     def _setup_profile_chain(self):
         """Setup the chain for patient profile generation."""
@@ -306,15 +319,16 @@ category X: [patient's disease] can be related to X due to Y.
             "error_message": str(e) if e else ""
         }
 
-def initialize_patient_collector_system(use_free_model: bool = True) -> PatientCollectorConfig:
+def initialize_patient_collector_system(use_free_model: bool = True, config: Optional[DictConfig] = None) -> PatientCollectorConfig:
     """
     Initialize the patient collector system with appropriate LLM managers.
-    
     Args:
         use_free_model: Whether to use free Groq model (default: True)
-        
+        config: Optional Hydra config
     Returns:
         PatientCollectorConfig: Configured patient collector system
     """
+    if config is not None:
+        return PatientCollectorConfig.from_config(config)
     llm_manager, llm_manager_tool = get_default_llm_managers()
     return PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool) 

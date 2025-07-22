@@ -24,6 +24,8 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from backend.my_agent.database_manager import DatabaseManager
+from omegaconf import OmegaConf
+import hydra
 
 def main():
     """Main function to create the policies vector store."""
@@ -65,6 +67,17 @@ Examples:
         help="Force recreation of the vector store even if it exists"
     )
     
+    parser.add_argument(
+        "--config-path",
+        default="config",
+        help="Path to the config directory (default: config)"
+    )
+    parser.add_argument(
+        "--config-name",
+        default="config",
+        help="Name of the config file without .yaml (default: config)"
+    )
+    
     args = parser.parse_args()
     
     # Convert to absolute paths if relative
@@ -96,6 +109,12 @@ Examples:
         print("Use --force-recreate to overwrite the existing vector store")
         return
     
+    # Load config if available
+    config = None
+    config_file = Path(args.config_path) / f"{args.config_name}.yaml"
+    if config_file.exists():
+        config = OmegaConf.load(str(config_file))
+    
     try:
         # Create the vector store
         print(f"📚 Creating policies vector store...")
@@ -103,7 +122,7 @@ Examples:
         print(f"🗂️  Vector store path: {vectorstore_path}")
         print(f"📦 Collection name: {args.collection_name}")
         
-        db_manager = DatabaseManager()
+        db_manager = DatabaseManager(config=config) if config is not None else DatabaseManager()
         vectorstore = db_manager.create_policy_vectorstore(
             policy_file_path=str(policy_file),
             vectorstore_path=str(vectorstore_path),

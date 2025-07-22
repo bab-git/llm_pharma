@@ -1,15 +1,31 @@
 """
 WorkflowManager for LLM Pharma Clinical Trial System
 
+USAGE EXAMPLE (with Hydra):
+--------------------------
+import hydra
+from omegaconf import DictConfig
+from backend.my_agent.workflow_manager import WorkflowManager
+
+@hydra.main(version_base=None, config_path='../../config', config_name='config')
+def main(cfg: DictConfig):
+    workflow = WorkflowManager.from_config(cfg)
+    # ... use workflow ...
+
+if __name__ == "__main__":
+    main()
+
 This module manages the LangGraph workflow for patient screening and trial matching.
 It handles graph creation, state management, and workflow execution.
 """
 
-from typing import TypedDict, List, Dict, Any
+from typing import TypedDict, List, Dict, Any, Optional
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 import sqlite3
 from langchain_core.documents import Document
+import hydra
+from omegaconf import DictConfig
 
 from .llm_manager import LLMManager
 from .database_manager import DatabaseManager
@@ -29,21 +45,35 @@ class WorkflowManager:
     - Result processing
     """
     
-    def __init__(self, llm_manager: LLMManager = None, llm_manager_tool: LLMManager = None):
+    def __init__(self, llm_manager: LLMManager = None, llm_manager_tool: LLMManager = None, config: Optional[DictConfig] = None):
         """
         Initialize the WorkflowManager.
         
         Args:
             llm_manager: LLM manager for general completions
             llm_manager_tool: LLM manager for tool calls
+            config: Optional Hydra config for models and paths
         """
-        self.llm_manager = llm_manager
-        self.llm_manager_tool = llm_manager_tool
-        self.db_manager = DatabaseManager()
+        if config is not None:
+            if llm_manager is None:
+                from .llm_manager import LLMManager
+                llm_manager = LLMManager.from_config(config, use_tool_models=False)
+            if llm_manager_tool is None:
+                from .llm_manager import LLMManager
+                llm_manager_tool = LLMManager.from_config(config, use_tool_models=True)
+            self.db_manager = DatabaseManager(config=config)
+        else:
+            self.llm_manager = llm_manager
+            self.llm_manager_tool = llm_manager_tool
+            self.db_manager = DatabaseManager()
         self.graph = None
         self.memory = None
         self.app = None
         self._setup_workflow()
+    
+    @classmethod
+    def from_config(cls, config: DictConfig) -> 'WorkflowManager':
+        return cls(config=config)
     
     def _setup_workflow(self):
         """Setup the workflow graph and memory."""
