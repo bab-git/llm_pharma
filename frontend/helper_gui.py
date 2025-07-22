@@ -455,7 +455,7 @@ Your options:
                 )
                 cont_btn = gr.Button("Continue Evaluation", scale=0, min_width=120)
                 debug_mode = gr.Checkbox(
-                    label="🔧 Debug Mode", value=False, scale=0, min_width=120
+                    label="🔧 Debug Mode", value=False, scale=0, min_width=120,
                 )
 
             with gr.Row():
@@ -540,7 +540,7 @@ Your options:
                     visible=False,
                 )
             with gr.Column(scale=1):
-                modify_profile_btn = gr.Button("✏️ Modify Profile", min_width=120)
+                modify_profile_btn = gr.Button("✏️ Modify Profile", min_width=120, elem_classes=["my-special-btn"])
         with gr.Row(elem_id="profile-section"):
             current_profile = gr.Textbox(
                 label="",
@@ -565,9 +565,9 @@ Your options:
                         visible=False,
                     )
                 with gr.Column(scale=1):
-                    policy_skip_btn = gr.Button("⏭️ Skip Policy", min_width=120)
+                    policy_skip_btn = gr.Button("⏭️ Skip Policy", min_width=120, elem_classes=["my-special-btn"])
                     policy_big_skip_btn = gr.Button(
-                        "⏭️ Skip All Policies", min_width=140
+                        "⏭️ Skip All Policies", min_width=140, elem_classes=["my-special-btn"]
                     )
             with gr.Row():
                 # Left column: Current Policies
@@ -651,7 +651,7 @@ You can obtain more information about each trial's details and possible relevanc
             )
 
             with gr.Row():
-                refresh_trials_btn = gr.Button("Refresh")
+                refresh_trials_btn = gr.Button("Refresh", elem_classes=["my-special-btn"])
             trials_bx = gr.Dataframe(
                 label="Retrieved relevant trials based on patient's profile",
                 wrap=True,
@@ -681,7 +681,7 @@ You can obtain more information about each trial's details and possible relevanc
                 visible=True,
             )
             with gr.Row():
-                refresh_scores_btn = gr.Button("Refresh")
+                refresh_scores_btn = gr.Button("Refresh", elem_classes=["my-special-btn"])
             trials_scores_bx = gr.Dataframe(
                 label="Trials Scores based on patient's profile",
                 wrap=True,
@@ -1085,6 +1085,11 @@ You can obtain more information about each trial's details and possible relevanc
                 padding: 15px;
                 border-radius: 8px;
                 margin-bottom: 20px;
+            }
+            /* style all buttons with the class 'my-special-btn' */
+            .my-special-btn {
+            background-color: #FFD700 !important;
+            color: #000 !important;
             }
             """,
         ) as demo:
