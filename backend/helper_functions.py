@@ -130,7 +130,7 @@ from my_agent.llm_manager import LLMManager
 from my_agent.database_manager import DatabaseManager
 
 # Import patient collector functionality from the new module
-from patient_collector import (
+from my_agent.patient_collector import (
     PatientCollectorConfig,
     patient_collector_node,
     profile_rewriter_node,

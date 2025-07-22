@@ -14,10 +14,7 @@ from langchain_core.documents import Document
 from .llm_manager import LLMManager
 from .database_manager import DatabaseManager
 # Import functions from helper_functions - these will be imported when needed to avoid circular imports
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from patient_collector import AgentState
+from .patient_collector import AgentState
 
 
 class WorkflowManager:
@@ -76,18 +73,17 @@ class WorkflowManager:
             StateGraph: The configured workflow graph
         """
         # Import functions here to avoid circular imports
-        import sys
-        import os
-        backend_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if backend_path not in sys.path:
-            sys.path.append(backend_path)
-            
-        from patient_collector import (
+        from .patient_collector import (
             create_agent_state,
             AgentState,
             patient_collector_node,
             profile_rewriter_node
         )
+        import sys
+        import os
+        backend_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if backend_path not in sys.path:
+            sys.path.append(backend_path)
         from helper_functions import (
             policy_search_node,
             policy_evaluator_node,

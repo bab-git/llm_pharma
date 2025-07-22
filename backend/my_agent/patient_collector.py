@@ -16,7 +16,7 @@ COMPLETED FEATURES:
 USAGE EXAMPLE:
 ==============
 
-    from patient_collector import (
+    from my_agent.patient_collector import (
         PatientCollectorConfig,
         patient_collector_node,
         profile_rewriter_node,
@@ -66,8 +66,8 @@ from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())
 
 # Import from existing modules
-from my_agent.llm_manager import LLMManager
-from my_agent.database_manager import DatabaseManager
+from .llm_manager import LLMManager
+from .database_manager import DatabaseManager
 
 class Patient_ID(BaseModel):
     """Model for extracting patient ID from user prompt."""
@@ -130,7 +130,7 @@ def create_agent_state() -> AgentState:
 
 def get_default_llm_managers():
     """Helper to get default LLMManagers for completions and tool calls."""
-    from my_agent.llm_manager import LLMManager
+    from .llm_manager import LLMManager
     return LLMManager.get_default_managers()
 
 class PatientCollectorConfig:
