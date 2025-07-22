@@ -16,21 +16,22 @@ Options:
     --force-recreate          Force recreation of the vector store even if it exists
 """
 
+import argparse
 import os
 import sys
-import argparse
 from pathlib import Path
 
 # Add the parent directory to the path to import helper_functions
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.my_agent.database_manager import DatabaseManager
 from omegaconf import OmegaConf
-import hydra
+
+from backend.my_agent.database_manager import DatabaseManager
+
 
 def main():
     """Main function to create the trials data and vector store."""
-    
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description="Create trials data and vector store for LLM Pharma system",
@@ -42,85 +43,85 @@ Examples:
     python scripts/create_trials_vectorstore.py --trials-csv-path data/my_trials.csv
     python scripts/create_trials_vectorstore.py --vectorstore-path data/vector_store
     python scripts/create_trials_vectorstore.py --force-recreate
-        """
+        """,
     )
-    
+
     parser.add_argument(
         "--trials-csv-path",
         default="data/trials_data.csv",
-        help="Path to the trials CSV file (default: data/trials_data.csv)"
+        help="Path to the trials CSV file (default: data/trials_data.csv)",
     )
-    
+
     parser.add_argument(
         "--vectorstore-path",
         default="vector_store",
-        help="Path to store the vector database (default: vector_store)"
+        help="Path to store the vector database (default: vector_store)",
     )
-    
+
     parser.add_argument(
         "--collection-name",
         default="trials",
-        help="Name of the collection in the vector store (default: trials)"
+        help="Name of the collection in the vector store (default: trials)",
     )
-    
+
     parser.add_argument(
         "--status-filter",
         default="recruiting",
-        help="Filter trials by status (default: recruiting)"
+        help="Filter trials by status (default: recruiting)",
     )
-    
+
     parser.add_argument(
         "--force-recreate",
         action="store_true",
-        help="Force recreation of the vector store even if it exists"
+        help="Force recreation of the vector store even if it exists",
     )
-    
+
     parser.add_argument(
         "--skip-data-download",
         action="store_true",
-        help="Skip downloading trials data (use existing CSV file)"
+        help="Skip downloading trials data (use existing CSV file)",
     )
-    
+
     parser.add_argument(
         "--config-path",
         default="config",
-        help="Path to the config directory (default: config)"
+        help="Path to the config directory (default: config)",
     )
     parser.add_argument(
         "--config-name",
         default="config",
-        help="Name of the config file without .yaml (default: config)"
+        help="Name of the config file without .yaml (default: config)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Convert to absolute paths if relative
     if not os.path.isabs(args.trials_csv_path):
         project_root = Path(__file__).parent.parent
         trials_csv_path = project_root / args.trials_csv_path
     else:
         trials_csv_path = Path(args.trials_csv_path)
-    
+
     if not os.path.isabs(args.vectorstore_path):
         project_root = Path(__file__).parent.parent
         vectorstore_path = project_root / args.vectorstore_path
     else:
         vectorstore_path = Path(args.vectorstore_path)
-    
+
     print("🧪 LLM Pharma - Trials Data and Vector Store Creator")
     print("=" * 60)
-    
+
     # Load config if available
     config = None
     config_file = Path(args.config_path) / f"{args.config_name}.yaml"
     if config_file.exists():
         config = OmegaConf.load(str(config_file))
-    
+
     try:
         # Step 1: Try to load existing trials data, download if not available
         df_trials = None
         csv_path = None
-        
+
         # if trials_csv_path.exists():
         #     print(f"📂 Found existing trials CSV file: {trials_csv_path}")
         #     try:
@@ -129,71 +130,79 @@ Examples:
         #         csv_path = str(trials_csv_path)
         #         print(f"✅ Successfully loaded existing trials data!")
         #         print(f"📊 Total trials loaded: {len(df_trials)}")
-                
+
         #         # Display sample data
         #         print(f"\n📋 Sample trials data:")
         #         print(df_trials.head(3).to_string(index=False))
-                
+
         #     except Exception as e:
         #         print(f"⚠️  Failed to load existing file: {e}")
         #         print("🔄 Will download fresh data...")
         #         df_trials = None
-        
+
         if df_trials is None:
-            print(f"📥 Downloading trials data...")
+            print("📥 Downloading trials data...")
             print(f"🔍 Status filter: {args.status_filter}")
-            
-            db_manager = DatabaseManager(config=config) if config is not None else DatabaseManager()
-            df_trials, csv_path = db_manager.create_trials_dataset(status=args.status_filter)
-            
-            print(f"✅ Trials data downloaded successfully!")
+
+            db_manager = (
+                DatabaseManager(config=config)
+                if config is not None
+                else DatabaseManager()
+            )
+            df_trials, csv_path = db_manager.create_trials_dataset(
+                status=args.status_filter
+            )
+
+            print("✅ Trials data downloaded successfully!")
             print(f"📁 CSV file location: {csv_path}")
             print(f"📊 Total trials: {len(df_trials)}")
-            
+
             # Display sample data
-            print(f"\n📋 Sample trials data:")
+            print("\n📋 Sample trials data:")
             print(df_trials.head(3).to_string(index=False))
-        
+
         # Step 2: Check if vector store already exists
         collection_path = vectorstore_path / "chroma.sqlite3"
         if collection_path.exists() and not args.force_recreate:
             print(f"\n⚠️  Vector store already exists at: {vectorstore_path}")
             print("Use --force-recreate to overwrite the existing vector store")
             # return
-        
+
         # Step 3: Create the vector store
-        print(f"\n📚 Creating trials vector store...")
+        print("\n📚 Creating trials vector store...")
         print(f"📄 Trials CSV file: {trials_csv_path}")
         print(f"🗂️  Vector store path: {vectorstore_path}")
         print(f"📦 Collection name: {args.collection_name}")
         print(f"🔍 Status filter: {args.status_filter}")
-        
+
         vectorstore = db_manager.create_trial_vectorstore(
             trials_csv_path=str(trials_csv_path),
             vectorstore_path=str(vectorstore_path),
             collection_name=args.collection_name,
             status_filter=args.status_filter,
-            vstore_delete=True
+            vstore_delete=True,
         )
-        
+
         print("\n✅ Trials vector store created successfully!")
         print(f"📁 Vector store location: {vectorstore_path}")
         print(f"📊 Collection count: {vectorstore._collection.count()} trials")
-        
+
         # Display collection info
-        print(f"\n📋 Collection information:")
+        print("\n📋 Collection information:")
         print(f"   Name: {args.collection_name}")
         print(f"   Documents: {vectorstore._collection.count()}")
         print(f"   Status filter: {args.status_filter}")
-        print(f"   Embedding model: nomic-embed-text-v1.5")
-        
+        print("   Embedding model: nomic-embed-text-v1.5")
+
         print("\n🎉 Trials vector store is ready for use!")
-        
+
     except Exception as e:
         print(f"❌ Error creating trials vector store: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()

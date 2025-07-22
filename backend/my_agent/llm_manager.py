@@ -1,9 +1,10 @@
+import logging
+from typing import Any, Callable, List, Tuple
+
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
-from typing import List, Optional, Callable, Any, Tuple
-import logging
-import hydra
 from omegaconf import DictConfig
+
 
 class LLMManager:
     """
@@ -18,6 +19,7 @@ class LLMManager:
         result1 = llm_manager.invoke_with_fallback(chain1.invoke, ..., reset=True)
         result2 = llm_manager.invoke_with_fallback(chain2.invoke, ..., reset=False)
     """
+
     def __init__(self, model_configs: List[tuple], temperature: float = 0.0):
         """
         model_configs: List of tuples (model_id, provider), provider is 'groq' or 'openai'
@@ -28,10 +30,10 @@ class LLMManager:
         self.current_index = 0
 
     @classmethod
-    def get_default_managers(cls) -> Tuple['LLMManager', 'LLMManager']:
+    def get_default_managers(cls) -> Tuple["LLMManager", "LLMManager"]:
         """
         Get default LLM managers for completions and tool calls.
-        
+
         Returns:
             Tuple of (completion_manager, tool_manager)
         """
@@ -44,10 +46,10 @@ class LLMManager:
         ]
         tool_model_list = [
             # ("llama-3.3-70b-versatile", "groq"), # Slow
-            # ("llama3-70b-8192", "groq"), # Slow        
+            # ("llama3-70b-8192", "groq"), # Slow
             # ("deepseek-r1-distill-llama-70b", "groq"), # Slow
             # ("moonshotai/kimi-k2-instruct", "groq"),
-            ("qwen/qwen3-32b", "groq"), # fast
+            ("qwen/qwen3-32b", "groq"),  # fast
             # ("gemma2-9b-it", "groq"), # tool fails
             # ("llama-3.1-8b-instant", "groq"), # tool fails
             # ("llama3-8b-8192", "groq"), # tool fails
@@ -56,7 +58,9 @@ class LLMManager:
         return cls(model_list), cls(tool_model_list)
 
     @classmethod
-    def from_config(cls, config: DictConfig, use_tool_models: bool = False) -> 'LLMManager':
+    def from_config(
+        cls, config: DictConfig, use_tool_models: bool = False
+    ) -> "LLMManager":
         """
         Create an LLMManager from a Hydra config DictConfig.
         Args:
@@ -65,18 +69,26 @@ class LLMManager:
         Returns:
             LLMManager instance
         """
-        models = config.models.tool_models if use_tool_models else config.models.agent_models
-        temperature = config.models.temperature if 'temperature' in config.models else 0.0
-        model_configs = [(m['id'], m['provider']) for m in models]
+        models = (
+            config.models.tool_models if use_tool_models else config.models.agent_models
+        )
+        temperature = (
+            config.models.temperature if "temperature" in config.models else 0.0
+        )
+        model_configs = [(m["id"], m["provider"]) for m in models]
         return cls(model_configs, temperature=temperature)
 
     def _build_clients(self):
         self.clients = []
         for model_id, provider in self.model_configs:
             if provider == "groq":
-                self.clients.append(ChatGroq(model=model_id, temperature=self.temperature))
+                self.clients.append(
+                    ChatGroq(model=model_id, temperature=self.temperature)
+                )
             elif provider == "openai":
-                self.clients.append(ChatOpenAI(model=model_id, temperature=self.temperature))
+                self.clients.append(
+                    ChatOpenAI(model=model_id, temperature=self.temperature)
+                )
             else:
                 raise ValueError(f"Unknown provider: {provider}")
 
@@ -97,7 +109,9 @@ class LLMManager:
     def reset(self):
         self.current_index = 0
 
-    def invoke_with_fallback(self, runnable: Callable, *args, reset: bool = True, **kwargs) -> Any:
+    def invoke_with_fallback(
+        self, runnable: Callable, *args, reset: bool = True, **kwargs
+    ) -> Any:
         """
         Try invoking the runnable (e.g., a chain or model call) with fallback on rate-limit/model errors.
         If reset is True (default), resets to the first model before trying. If False, continues from current model.
@@ -110,9 +124,17 @@ class LLMManager:
                 return runnable(*args, **kwargs)
             except Exception as e:
                 msg = str(e).lower()
-                if "rate limit" in msg or "rate_limit" in msg or "quota" in msg or "unavailable" in msg or "over capacity" in msg:
+                if (
+                    "rate limit" in msg
+                    or "rate_limit" in msg
+                    or "quota" in msg
+                    or "unavailable" in msg
+                    or "over capacity" in msg
+                ):
                     last_err = e
                     if self.advance():
-                        logging.warning(f"Rate-limit or error on model, switching to {self.current_model_id}")
+                        logging.warning(
+                            f"Rate-limit or error on model, switching to {self.current_model_id}"
+                        )
                         continue
-                raise last_err or e 
+                raise last_err or e

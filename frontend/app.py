@@ -3,11 +3,13 @@
 Simplified LLM Pharma Frontend App
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
-from dotenv import load_dotenv, find_dotenv
+
+from dotenv import find_dotenv, load_dotenv
 from helper_gui import trials_gui
+
 
 # Optional backend imports; deferred until needed
 def ensure_path_exists(path: Path, factory, *args, **kwargs):
@@ -35,22 +37,25 @@ def create_workflow_manager(demo: bool):
     """
     if demo:
         from demo_graph import create_demo_graph
+
         # Demo returns a compiled graph directly, not a WorkflowManager
         return create_demo_graph()
 
     # Import here to avoid circular imports
-    import sys
     import os
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    
-    from backend.my_agent.workflow_manager import WorkflowManager
+
+    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
     from backend.my_agent.llm_manager import LLMManager
-    
+    from backend.my_agent.workflow_manager import WorkflowManager
+
     # Create LLM managers
     llm_manager, llm_manager_tool = LLMManager.get_default_managers()
-    
+
     # Create and return workflow manager
-    workflow_manager = WorkflowManager(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
+    workflow_manager = WorkflowManager(
+        llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
+    )
     return workflow_manager
 
 
@@ -65,17 +70,19 @@ def main():
     args = parser.parse_args()
 
     # Ensure necessary databases
-    import sys
     import os
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     from backend.my_agent.database_manager import DatabaseManager
-    
+
     db_manager = DatabaseManager()
     patients_db = make_absolute("sql_server/patients.db")
     ensure_path_exists(patients_db, db_manager.create_demo_patient_database)
 
     trials_csv = make_absolute("data/trials_data.csv")
-    ensure_path_exists(trials_csv, db_manager.create_trials_dataset, status='recruiting')
+    ensure_path_exists(
+        trials_csv, db_manager.create_trials_dataset, status="recruiting"
+    )
 
     # Build workflow manager
     workflow_manager = create_workflow_manager(demo=args.demo)

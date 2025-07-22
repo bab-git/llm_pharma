@@ -3,7 +3,7 @@ Policy Service Module
 
 This module encapsulates policy knowledge for the LLM Pharma clinical trial workflow system:
 - Policy vector store builder and retrieval
-- Policy search functionality  
+- Policy search functionality
 - Date/number comparison tool wrappers plus ReAct agent for eligibility scoring
 - Policy evaluator state machine logic
 
@@ -30,97 +30,80 @@ USAGE EXAMPLE:
 
     from my_agent.policy_service import PolicyService
     from my_agent.patient_collector import create_agent_state
-    
+
     # Create policy service
     policy_service = PolicyService()
-    
+
     # Create initial state with patient profile
     state = create_agent_state()
     state['patient_profile'] = "Patient profile text..."
-    
+
     # Run policy search and evaluation
     search_result = policy_service.policy_search_node(state)
     state.update(search_result)
-    
+
     eval_result = policy_service.policy_evaluator_node(state)
     print(f"Policy Eligible: {eval_result['policy_eligible']}")
 
 """
 
-from langchain_core.messages import ToolMessage
-from langchain_core.runnables import RunnableLambda
-from langgraph.prebuilt import ToolNode
-from typing import Annotated, List, Optional
-from typing_extensions import TypedDict
-from langgraph.graph.message import AnyMessage, add_messages
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
-from langchain_core.documents import Document
-from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.prebuilt import ToolNode
-from langgraph.prebuilt import tools_condition
-from pydantic import BaseModel, Field
-from operator import itemgetter
-from typing import Literal
-from langgraph.graph import StateGraph, END
-import sqlite3
-from langchain_core.tools import StructuredTool
-from datetime import date, datetime
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langgraph.prebuilt import create_react_agent
-from langchain_core.tools import tool
+from datetime import datetime
+from typing import Optional
 
-import os
-from openai import OpenAI
-from langchain_openai import ChatOpenAI
-from langchain_groq import ChatGroq
-from langchain_core.output_parsers import StrOutputParser
+from dotenv import find_dotenv, load_dotenv
 from langchain.prompts import PromptTemplate
-import pandas as pd
-import ast
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+from pydantic import BaseModel, Field
 
-from dotenv import load_dotenv, find_dotenv
-_ = load_dotenv(find_dotenv()) # read local .env file
+_ = load_dotenv(find_dotenv())  # read local .env file
+
+from omegaconf import DictConfig
 
 # Import required components
-from .llm_manager import LLMManager
-from .database_manager import DatabaseManager
-from .patient_collector import (
-    PatientCollectorConfig,
-    create_agent_state,
-    AgentState
-)
-
-import hydra
-from omegaconf import DictConfig
+from backend.my_agent.database_manager import DatabaseManager
+from backend.my_agent.patient_collector import AgentState, PatientCollectorConfig
 
 
 class PolicyEligibility(BaseModel):
     """Give the patient's eligibility result."""
-    eligibility: str = Field(description="Patient's eligibility for the clinical trial. 'yes' or 'no'")
-    reason: str = Field(description="The reason(s) only if the patient is not eligible for clinical trials. Otherwise use N/A")
+
+    eligibility: str = Field(
+        description="Patient's eligibility for the clinical trial. 'yes' or 'no'"
+    )
+    reason: str = Field(
+        description="The reason(s) only if the patient is not eligible for clinical trials. Otherwise use N/A"
+    )
 
     class Config:
         schema_extra = {
             "example": {
-                "eligibility": 'yes',
+                "eligibility": "yes",
                 "reason": "N/A",
             },
             "example 2": {
-                "eligibility": 'no',
+                "eligibility": "no",
                 "reason": "The patient is pregnant at the moment.",
-            },                
+            },
         }
 
 
 class PolicyService:
     """
     Service class for policy-related operations in the clinical trial workflow.
-    
+
     This class encapsulates all policy knowledge: retrieval, question-generation,
     tool calls, and final yes/no eligibility decisions.
     """
-    
-    def __init__(self, llm_manager=None, llm_manager_tool=None, config: Optional[DictConfig] = None):
+
+    def __init__(
+        self,
+        llm_manager=None,
+        llm_manager_tool=None,
+        config: Optional[DictConfig] = None,
+    ):
         """
         Initialize the PolicyService.
         Args:
@@ -128,50 +111,59 @@ class PolicyService:
             llm_manager_tool: LLM manager for tool calls (optional, will create default if not provided)
             config: Optional Hydra config for models and paths
         """
+        from backend.my_agent.llm_manager import LLMManager
+
         if config is not None:
             if llm_manager is None:
-                from .llm_manager import LLMManager
                 llm_manager = LLMManager.from_config(config, use_tool_models=False)
             if llm_manager_tool is None:
-                from .llm_manager import LLMManager
                 llm_manager_tool = LLMManager.from_config(config, use_tool_models=True)
+            self.llm_manager = llm_manager
+            self.llm_manager_tool = llm_manager_tool
             self.db_manager = DatabaseManager(config=config)
         else:
             if llm_manager is None or llm_manager_tool is None:
-                self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
+                self.llm_manager, self.llm_manager_tool = (
+                    LLMManager.get_default_managers()
+                )
             else:
                 self.llm_manager = llm_manager
                 self.llm_manager_tool = llm_manager_tool
             self.db_manager = DatabaseManager()
-        if config is not None:
-            self.llm_manager = llm_manager
-            self.llm_manager_tool = llm_manager_tool
-    
+
     @classmethod
-    def from_config(cls, config: DictConfig) -> 'PolicyService':
+    def from_config(cls, config: DictConfig) -> "PolicyService":
         return cls(config=config)
 
-    def policy_tools(self, policy_qs: str, patient_profile: str, model_agent=None, llm_manager_tool=None):
+    def policy_tools(
+        self,
+        policy_qs: str,
+        patient_profile: str,
+        model_agent=None,
+        llm_manager_tool=None,
+    ):
         """
         Policy evaluation tools for clinical trial eligibility assessment.
-        
+
         Args:
             policy_qs: Policy questions to evaluate
             patient_profile: Patient profile document
             model_agent: LLM model for evaluation (deprecated, kept for compatibility)
             llm_manager_tool: LLM manager for tool calls with fallback (optional)
-            
+
         Returns:
             str: Evaluation result
         """
         # Use instance managers if not provided
         if llm_manager_tool is None:
             llm_manager_tool = self.llm_manager_tool
-            
+
         # Simplified date input schema
         class DateInput(BaseModel):
             past_date: str = Field(description="A past date in YYYY-MM-DD format")
-            threshold_months: int = Field(description="Number of months to compare against")
+            threshold_months: int = Field(
+                description="Number of months to compare against"
+            )
 
         @tool("get_today_date", return_direct=False)
         def get_today_date() -> str:
@@ -184,7 +176,11 @@ class PolicyService:
             try:
                 today = datetime.today().date()
                 parsed_date = datetime.strptime(past_date, "%Y-%m-%d").date()
-                months_diff = (today.year - parsed_date.year) * 12 + today.month - parsed_date.month
+                months_diff = (
+                    (today.year - parsed_date.year) * 12
+                    + today.month
+                    - parsed_date.month
+                )
                 is_within_threshold = months_diff <= threshold_months
                 return f"Months since {past_date}: {months_diff}. Within {threshold_months} months: {is_within_threshold}"
             except ValueError:
@@ -232,19 +228,23 @@ Available tools: {tool_names}
 """
 
         user_message_content = f"Policy Questions to Evaluate:\n{policy_qs}"
-        
+
         # Use simpler message format that works better with Groq
         try:
+
             def run_react_agent():
                 # Create the react_agent inside the runnable using the current model
                 current_model = llm_manager_tool.current
                 react_agent = create_react_agent(current_model, tools, debug=False)
-                return react_agent.invoke({
-                    "messages": [
-                        {"role": "system", "content": system_message},
-                        {"role": "user", "content": user_message_content}
-                    ]
-                })
+                return react_agent.invoke(
+                    {
+                        "messages": [
+                            {"role": "system", "content": system_message},
+                            {"role": "user", "content": user_message_content},
+                        ]
+                    }
+                )
+
             result = llm_manager_tool.invoke_with_fallback(run_react_agent, reset=False)
             return result["messages"][-1].content
         except Exception as e:
@@ -259,11 +259,13 @@ Available tools: {tool_names}
             
             Answer with 'yes' if eligible, 'no' if not eligible, and include reasoning.
             """
-            
+
             try:
                 # Use the current model from the manager for fallback too
                 current_model = llm_manager_tool.current
-                response = current_model.invoke([{"role": "user", "content": fallback_prompt}])
+                response = current_model.invoke(
+                    [{"role": "user", "content": fallback_prompt}]
+                )
                 return response.content
             except Exception as fallback_error:
                 print(f"Fallback also failed: {fallback_error}")
@@ -272,70 +274,72 @@ Available tools: {tool_names}
     def policy_search_node(self, state: AgentState) -> dict:
         """
         Policy search node that retrieves relevant institutional policies based on patient profile.
-        
+
         Args:
             state: Current agent state containing patient profile
-            
+
         Returns:
             Updated state with retrieved policies
         """
         try:
             # Get patient profile from state
             patient_profile = state.get("patient_profile", "")
-            
+
             if not patient_profile:
                 print("⚠️ No patient profile available for policy search")
                 return {
                     "last_node": "policy_search",
                     "policies": [],
                     "unchecked_policies": [],
-                    "policy_eligible": state.get("policy_eligible", False)
+                    "policy_eligible": state.get("policy_eligible", False),
                 }
-            
+
             # Create or load policy vector store
             policy_vectorstore = self.db_manager.create_policy_vectorstore()
-            
+
             # Create retriever
             retriever = policy_vectorstore.as_retriever(search_kwargs={"k": 5})
-            
+
             # Retrieve relevant policies
             docs_retrieved = retriever.get_relevant_documents(patient_profile)
             print(f"Retrieved policies to be evaluated: {len(docs_retrieved)}")
-            
+
             print(f"✅ Retrieved {len(docs_retrieved)} relevant policy sections")
-            
+
             return {
                 "last_node": "policy_search",
                 "policies": docs_retrieved,
                 "unchecked_policies": docs_retrieved.copy(),
-                "policy_eligible": state.get("policy_eligible", False)
+                "policy_eligible": state.get("policy_eligible", False),
             }
-            
+
         except Exception as e:
             print(f"❌ Error in policy search: {e}")
-            
+
             return {
                 "last_node": "policy_search",
                 "policies": [],
                 "unchecked_policies": [],
                 "policy_eligible": state.get("policy_eligible", False),
-                "error_message": str(e) if e else ""
+                "error_message": str(e) if e else "",
             }
 
     def policy_evaluator_node(self, state: AgentState) -> dict:
         """
         Policy evaluator node that evaluates patient eligibility against institutional policies.
-        
+
         Args:
             state: Current agent state containing patient profile and unchecked policies
-            
+
         Returns:
             Updated state with evaluation results
         """
         try:
-            config = PatientCollectorConfig(llm_manager=self.llm_manager, llm_manager_tool=self.llm_manager_tool)
+            config = PatientCollectorConfig(
+                llm_manager=self.llm_manager, llm_manager_tool=self.llm_manager_tool
+            )
             unchecked_policies = state.get("unchecked_policies", [])
-            
+
             if not unchecked_policies:
                 print("⚠️ No unchecked policies available for evaluation")
                 return {
@@ -343,17 +347,21 @@ Available tools: {tool_names}
                     "policy_eligible": state.get("policy_eligible", False),
                     "rejection_reason": state.get("rejection_reason", ""),
                     "revision_number": state.get("revision_number", 0) + 1,
-                    'checked_policy': None,
-                    'policy_qs': ""
+                    "checked_policy": None,
+                    "policy_qs": "",
                 }
-            
+
             policy_doc = unchecked_policies[0]
-            policy_header = policy_doc.page_content.split('\n', 2)[1] if len(policy_doc.page_content.split('\n')) > 1 else "Policy"
-            print(f'Evaluating Policy:\n {policy_header}')
-            
+            policy_header = (
+                policy_doc.page_content.split("\n", 2)[1]
+                if len(policy_doc.page_content.split("\n")) > 1
+                else "Policy"
+            )
+            print(f"Evaluating Policy:\n {policy_header}")
+
             policy = policy_doc.page_content
             patient_profile = state.get("patient_profile", "")
-            
+
             if not patient_profile:
                 print("⚠️ No patient profile available for policy evaluation")
                 return {
@@ -361,10 +369,10 @@ Available tools: {tool_names}
                     "policy_eligible": False,
                     "rejection_reason": "No patient profile available",
                     "revision_number": state.get("revision_number", 0) + 1,
-                    'checked_policy': policy_doc,
-                    'policy_qs': ""
+                    "checked_policy": policy_doc,
+                    "policy_qs": "",
                 }
-            
+
             # Generate policy questions
             def run_policy_qs():
                 current_model = self.llm_manager.current
@@ -385,52 +393,58 @@ Available tools: {tool_names}
                 )
                 policy_rps_chain = prompt_rps | current_model | StrOutputParser()
                 return policy_rps_chain.invoke({"policy": policy})
-            
+
             policy_qs = self.llm_manager.invoke_with_fallback(run_policy_qs, reset=True)
             print(f"✅ Generated policy questions: {policy_qs}")
-            
+
             # Evaluate using policy tools
             def run_policy_tools():
-                return self.policy_tools(policy_qs, patient_profile, config.model_tool, self.llm_manager_tool)
-            
-            result = self.llm_manager_tool.invoke_with_fallback(run_policy_tools, reset=False)
+                return self.policy_tools(
+                    policy_qs, patient_profile, config.model_tool, self.llm_manager_tool
+                )
+
+            result = self.llm_manager_tool.invoke_with_fallback(
+                run_policy_tools, reset=False
+            )
             print(f"✅ Policy evaluation result: {result}")
-            
+
             # Get final eligibility decision
             message = f"""Evaluation of the patient's eligibility:\n{result}\n\nIs the patient eligible according to this policy?"""
-            
+
             def run_eligibility():
                 current_model = self.llm_manager_tool.current
                 llm_with_tools = current_model.bind_tools([PolicyEligibility])
                 return llm_with_tools.invoke(message)
-            
-            response = self.llm_manager_tool.invoke_with_fallback(run_eligibility, reset=False)
-            
+
+            response = self.llm_manager_tool.invoke_with_fallback(
+                run_eligibility, reset=False
+            )
+
             if response.tool_calls and len(response.tool_calls) > 0:
                 tool_call = response.tool_calls[0]
-                if 'args' in tool_call:
-                    policy_eligible = tool_call['args'].get('eligibility', 'no')
-                    rejection_reason = tool_call['args'].get('reason', 'N/A')
+                if "args" in tool_call:
+                    policy_eligible = tool_call["args"].get("eligibility", "no")
+                    rejection_reason = tool_call["args"].get("reason", "N/A")
                 else:
-                    policy_eligible = 'no'
-                    rejection_reason = 'Unable to parse evaluation result'
+                    policy_eligible = "no"
+                    rejection_reason = "Unable to parse evaluation result"
             else:
-                policy_eligible = 'no'
-                rejection_reason = 'No evaluation result available'
-            
+                policy_eligible = "no"
+                rejection_reason = "No evaluation result available"
+
             unchecked_policies.pop(0)
             print(f"Remaining unchecked policies: {len(unchecked_policies)}")
-            
+
             return {
                 "last_node": "policy_evaluator",
-                "policy_eligible": policy_eligible.lower() == 'yes',
+                "policy_eligible": policy_eligible.lower() == "yes",
                 "rejection_reason": rejection_reason,
                 "revision_number": state.get("revision_number", 0) + 1,
-                'checked_policy': policy_doc,
-                'policy_qs': policy_qs,
-                'unchecked_policies': unchecked_policies
+                "checked_policy": policy_doc,
+                "policy_qs": policy_qs,
+                "unchecked_policies": unchecked_policies,
             }
-            
+
         except Exception as e:
             print(f"❌ Error in policy evaluation: {e}")
             return {
@@ -438,9 +452,9 @@ Available tools: {tool_names}
                 "policy_eligible": False,
                 "rejection_reason": f"Error during evaluation: {str(e)}",
                 "revision_number": state.get("revision_number", 0) + 1,
-                'checked_policy': None,
-                'policy_qs': "",
-                "error_message": str(e) if e else ""
+                "checked_policy": None,
+                "policy_qs": "",
+                "error_message": str(e) if e else "",
             }
 
 
@@ -450,44 +464,49 @@ def get_default_policy_service(config: Optional[DictConfig] = None):
         return PolicyService.from_config(config)
     return PolicyService()
 
+
 def policy_search_node(state: AgentState) -> dict:
     """
     Standalone policy search node function for backward compatibility.
-    
+
     Args:
         state: Current agent state containing patient profile
-        
+
     Returns:
         Updated state with retrieved policies
     """
     policy_service = get_default_policy_service()
     return policy_service.policy_search_node(state)
 
+
 def policy_evaluator_node(state: AgentState) -> dict:
     """
     Standalone policy evaluator node function for backward compatibility.
-    
+
     Args:
         state: Current agent state containing patient profile and unchecked policies
-        
+
     Returns:
         Updated state with evaluation results
     """
     policy_service = get_default_policy_service()
     return policy_service.policy_evaluator_node(state)
 
+
 def policy_tools(policy_qs: str, patient_profile: str, model_agent, llm_manager_tool):
     """
     Standalone policy tools function for backward compatibility.
-    
+
     Args:
         policy_qs: Policy questions to evaluate
         patient_profile: Patient profile document
         model_agent: LLM model for evaluation (deprecated)
         llm_manager_tool: LLM manager for tool calls with fallback
-        
+
     Returns:
         str: Evaluation result
     """
     policy_service = get_default_policy_service()
-    return policy_service.policy_tools(policy_qs, patient_profile, model_agent, llm_manager_tool) 
+    return policy_service.policy_tools(
+        policy_qs, patient_profile, model_agent, llm_manager_tool
+    )

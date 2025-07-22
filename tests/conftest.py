@@ -8,10 +8,10 @@ all test modules.
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 
 @pytest.fixture
@@ -209,7 +209,7 @@ def sample_trial_document():
 @pytest.fixture
 def sample_agent_state():
     """Create a sample agent state for testing."""
-    from src.llm_pharma.state import AgentState, initialize_state
+    from src.llm_pharma.state import initialize_state
 
     return initialize_state(
         patient_prompt="Is patient 1 eligible for trials?",

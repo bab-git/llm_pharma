@@ -13,21 +13,22 @@ Options:
     --force-recreate      Force recreation of the database even if it exists
 """
 
+import argparse
 import os
 import sys
-import argparse
 from pathlib import Path
 
 # Add the parent directory to the path to import helper_functions
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.my_agent.database_manager import DatabaseManager
 from omegaconf import OmegaConf
-import hydra
+
+from backend.my_agent.database_manager import DatabaseManager
+
 
 def main():
     """Main function to create the patients database."""
-    
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description="Create patients database for LLM Pharma system",
@@ -37,78 +38,82 @@ Examples:
     python scripts/create_patients_database.py
     python scripts/create_patients_database.py --db-path data/patients.db
     python scripts/create_patients_database.py --force-recreate
-        """
+        """,
     )
-    
+
     parser.add_argument(
         "--db-path",
         default="sql_server/patients.db",
-        help="Path where the database file will be created (default: sql_server/patients.db)"
+        help="Path where the database file will be created (default: sql_server/patients.db)",
     )
-    
+
     parser.add_argument(
         "--force-recreate",
         action="store_true",
-        help="Force recreation of the database even if it exists"
+        help="Force recreation of the database even if it exists",
     )
-    
+
     parser.add_argument(
         "--config-path",
         default="config",
-        help="Path to the config directory (default: config)"
+        help="Path to the config directory (default: config)",
     )
     parser.add_argument(
         "--config-name",
         default="config",
-        help="Name of the config file without .yaml (default: config)"
+        help="Name of the config file without .yaml (default: config)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Convert to absolute path if relative
     if not os.path.isabs(args.db_path):
         project_root = Path(__file__).parent.parent
         db_path = project_root / args.db_path
     else:
         db_path = Path(args.db_path)
-    
+
     print("🏥 LLM Pharma - Patients Database Creator")
     print("=" * 50)
-    
+
     # Check if database already exists
     if db_path.exists() and not args.force_recreate:
         print(f"⚠️  Database already exists at: {db_path}")
         print("Use --force-recreate to overwrite the existing database")
         return
-    
+
     # Load config if available
     config = None
     config_file = Path(args.config_path) / f"{args.config_name}.yaml"
     if config_file.exists():
         config = OmegaConf.load(str(config_file))
-    
+
     try:
         # Create the database
         print(f"📊 Creating patients database at: {db_path}")
-        db_manager = DatabaseManager(config=config) if config is not None else DatabaseManager()
+        db_manager = (
+            DatabaseManager(config=config) if config is not None else DatabaseManager()
+        )
         df = db_manager.create_demo_patient_database(str(db_path))
-        
+
         print("\n✅ Database creation completed successfully!")
         print(f"📁 Database location: {db_path}")
         print(f"📁 CSV export location: {db_path.with_suffix('.csv')}")
         print(f"👥 Total patients created: {len(df)}")
-        
+
         # Display sample data
         print("\n📋 Sample patient data:")
         print(df.head(3).to_string(index=False))
-        
+
         print("\n🎉 Patients database is ready for use!")
-        
+
     except Exception as e:
         print(f"❌ Error creating patients database: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
+
 if __name__ == "__main__":
-    main() 
+    main()
