@@ -14,7 +14,7 @@ from langchain_core.documents import Document
 from .llm_manager import LLMManager
 from .database_manager import DatabaseManager
 # Import functions from helper_functions - these will be imported when needed to avoid circular imports
-from .patient_collector import AgentState
+from .patient_collector import AgentState, create_agent_state
 from .trial_service import trial_search_node, grade_trials_node
 
 
@@ -175,10 +175,7 @@ class WorkflowManager:
             Dict containing the workflow results
         """
         try:
-            # Import create_agent_state here to avoid circular imports
-            from backend.helper_functions import create_agent_state
-            
-            # Create initial state
+            # Use create_agent_state from .patient_collector
             state = create_agent_state()
             state['patient_prompt'] = patient_prompt
             
