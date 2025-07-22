@@ -84,9 +84,11 @@ class WorkflowManager:
         backend_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if backend_path not in sys.path:
             sys.path.append(backend_path)
-        from helper_functions import (
+        from .policy_service import (
             policy_search_node,
-            policy_evaluator_node,
+            policy_evaluator_node
+        )
+        from helper_functions import (
             trial_search_node,
             grade_trials_node
         )
