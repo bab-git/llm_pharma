@@ -37,13 +37,11 @@ def test_policy_service():
     try:
         # Test 1: Import PolicyService
         print("\n1. Testing PolicyService imports...")
-        from backend.my_agent.policy_service import (
+        from backend.my_agent.policy_service import (  # get_default_policy_service,; policy_tools,
             PolicyEligibility,
             PolicyService,
-            # get_default_policy_service,
             policy_evaluator_node,
             policy_search_node,
-            # policy_tools,
         )
 
         print("✅ Successfully imported all PolicyService components")

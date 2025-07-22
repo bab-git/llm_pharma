@@ -204,12 +204,11 @@ class WorkflowManager:
             state["patient_prompt"] = patient_prompt
 
             # Run the workflow
-            if thread_id:
-                result = self.app.invoke(
-                    state, config={"configurable": {"thread_id": thread_id}}
-                )
-            else:
-                result = self.app.invoke(state)
+            if thread_id is None:
+                thread_id = 1
+            result = self.app.invoke(
+                state, config={"configurable": {"thread_id": thread_id}}
+            )
 
             # Extract key results
             workflow_result = {

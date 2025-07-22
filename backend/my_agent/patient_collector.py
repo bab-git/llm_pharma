@@ -67,8 +67,10 @@ from .database_manager import DatabaseManager
 
 # Import from existing modules
 from .llm_manager import LLMManager
+
 # Load environment variables
 _ = load_dotenv(find_dotenv())
+
 
 class Patient_ID(BaseModel):
     """Model for extracting patient ID from user prompt."""
