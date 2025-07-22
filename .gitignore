@@ -1,6 +1,6 @@
 .env
 .*env*/
-.temp/
+temp/
 __pycache*
 data/
 chromadb/

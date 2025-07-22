@@ -15,6 +15,7 @@ from .llm_manager import LLMManager
 from .database_manager import DatabaseManager
 # Import functions from helper_functions - these will be imported when needed to avoid circular imports
 from .patient_collector import AgentState
+from .trial_service import trial_search_node, grade_trials_node
 
 
 class WorkflowManager:
@@ -88,7 +89,7 @@ class WorkflowManager:
             policy_search_node,
             policy_evaluator_node
         )
-        from helper_functions import (
+        from .trial_service import (
             trial_search_node,
             grade_trials_node
         )
