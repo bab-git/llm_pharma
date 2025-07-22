@@ -882,54 +882,6 @@ category X: [patient's disease] can be related to X due to Y.
             "error_message": str(e) if e else ""
         }
 
-# Conditional edge functions
-def should_continue_patient(state: AgentState) -> str:
-    """Determine if patient collection should continue."""
-    if state.get("patient_data"):
-        return "policy_search"
-    else:
-        return END
-
-def should_continue_policy(state: AgentState) -> str:
-    """Determine if policy evaluation should continue."""
-    if state.get("revision_number", 0) > state.get("max_revisions", 3):
-        return END
-    
-    more_policies = len(state.get("unchecked_policies", [])) > 0
-    if state.get("policy_eligible", False):
-        if more_policies:
-            return "policy_evaluator"
-        else:
-            return "trial_search"
-    else:
-        return END
-
-def should_continue_trial_search(state: AgentState) -> str:
-    """Determine if trial search should continue."""
-    # relevant_trials = state.get("relevant_trials", [])
-    # has_trial_math = any(trial.get('relevance_score') == 'Yes' for trial in relevant_trials)
-    trials = state.get("trials", [])
-    has_potential_trial = trials != []
-    
-    # if state.get("trial_searches", 0) > state.get("max_trial_searches", 2):
-    #     print("--- TRIAL SEARCH: MAX TRIAL SEARCHES REACHED --> END ---")
-    #     return END
-    if has_potential_trial:        
-        return "grade_trials"
-    else:
-        return END
-
-def should_continue_trials(state: AgentState) -> str:
-    """Determine if trial search should continue."""
-    relevant_trials = state.get("relevant_trials", [])
-    has_trial_math = any(trial.get('relevance_score') == 'Yes' for trial in relevant_trials)    
-    
-    if state.get("trial_searches", 0) > state.get("max_trial_searches", 3):
-        return END
-    elif not has_trial_math:
-        return "profile_rewriter"
-    else:
-        return END
 
 
 # Dataset creation function moved to DatabaseManager class
