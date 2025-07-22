@@ -100,25 +100,25 @@ class PolicyService:
         self,
         llm_manager=None,
         llm_manager_tool=None,
-        config: Optional[DictConfig] = None,
+        configs: Optional[DictConfig] = None,
     ):
         """
         Initialize the PolicyService.
         Args:
             llm_manager: LLM manager for completions (optional, will create default if not provided)
             llm_manager_tool: LLM manager for tool calls (optional, will create default if not provided)
-            config: Optional Hydra config for models and paths
+            configs: Optional Hydra config for models and paths
         """
         from backend.my_agent.llm_manager import LLMManager
 
-        if config is not None:
+        if configs is not None:
             if llm_manager is None:
-                llm_manager = LLMManager.from_config(config, use_tool_models=False)
+                llm_manager = LLMManager.from_config(configs, use_tool_models=False)
             if llm_manager_tool is None:
-                llm_manager_tool = LLMManager.from_config(config, use_tool_models=True)
+                llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
             self.llm_manager = llm_manager
             self.llm_manager_tool = llm_manager_tool
-            self.db_manager = DatabaseManager(config=config)
+            self.db_manager = DatabaseManager(configs=configs)
         else:
             if llm_manager is None or llm_manager_tool is None:
                 self.llm_manager, self.llm_manager_tool = (
@@ -130,8 +130,8 @@ class PolicyService:
             self.db_manager = DatabaseManager()
 
     @classmethod
-    def from_config(cls, config: DictConfig) -> "PolicyService":
-        return cls(config=config)
+    def from_config(cls, configs: DictConfig) -> "PolicyService":
+        return cls(configs=configs)
 
     def policy_tools(
         self,

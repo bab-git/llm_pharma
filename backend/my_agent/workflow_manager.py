@@ -49,7 +49,7 @@ class WorkflowManager:
         self,
         llm_manager: LLMManager = None,
         llm_manager_tool: LLMManager = None,
-        config: Optional[DictConfig] = None,
+        configs: Optional[DictConfig] = None,
     ):
         """
         Initialize the WorkflowManager.
@@ -59,16 +59,16 @@ class WorkflowManager:
             llm_manager_tool: LLM manager for tool calls
             config: Optional Hydra config for models and paths
         """
-        if config is not None:
+        if configs is not None:
             if llm_manager is None:
                 from .llm_manager import LLMManager
 
-                llm_manager = LLMManager.from_config(config, use_tool_models=False)
+                llm_manager = LLMManager.from_config(configs, use_tool_models=False)
             if llm_manager_tool is None:
                 from .llm_manager import LLMManager
 
-                llm_manager_tool = LLMManager.from_config(config, use_tool_models=True)
-            self.db_manager = DatabaseManager(config=config)
+                llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
+            self.db_manager = DatabaseManager(configs=configs)
         else:
             self.llm_manager = llm_manager
             self.llm_manager_tool = llm_manager_tool
@@ -79,8 +79,8 @@ class WorkflowManager:
         self._setup_workflow()
 
     @classmethod
-    def from_config(cls, config: DictConfig) -> "WorkflowManager":
-        return cls(config=config)
+    def from_config(cls, configs: DictConfig) -> "WorkflowManager":
+        return cls(configs=configs)
 
     def _setup_workflow(self):
         """Setup the workflow graph and memory."""

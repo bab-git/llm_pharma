@@ -2,11 +2,33 @@
 
 models:
   agent_models:
+    - id: meta-llama/llama-4-maverick-17b-128e-instruct
+      provider: groq  # Slow
+    - id: meta-llama/llama-4-scout-17b-16e-instruct
+      provider: groq  # Slow
     - id: mistral-saba-24b
       provider: groq
+    # - id: llama3-8b-8192
+    #   provider: groq
   tool_models:
-    - id: qwen/qwen3-32b
+    - id: llama-3.3-70b-versatile
+      provider: groq  # Slow
+    - id: llama3-70b-8192
+      provider: groq  # Slow
+    - id: deepseek-r1-distill-llama-70b
+      provider: groq  # Slow
+    - id: moonshotai/kimi-k2-instruct
       provider: groq
+    - id: qwen/qwen3-32b
+      provider: groq  # fast
+    # - id: gemma2-9b-it
+    #   provider: groq  # tool fails
+    # - id: llama-3.1-8b-instant
+    #   provider: groq  # tool fails
+    # - id: llama3-8b-8192
+    #   provider: groq  # tool fails
+    # - id: gpt-3.5-turbo
+    #   provider: openai
   temperature: 0.0
 
 directories:

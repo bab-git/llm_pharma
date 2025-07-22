@@ -63,13 +63,12 @@ def get_default_llm_managers():
 
 
 # --- Trial Search Node ---
-def trial_search_node(state: AgentState, config: Optional[DictConfig] = None) -> dict:
-    config = None
+def trial_search_node(state: AgentState, configs: Optional[DictConfig] = None) -> dict:
     try:
-        if config is not None:
+        if configs is not None:
             llm_manager, llm_manager_tool = get_default_llm_managers()
-            # collector_config = PatientCollectorConfig.from_config(config)
-            db_manager = DatabaseManager(config=config)
+            # collector_config = PatientCollectorConfig.from_config(configs)
+            db_manager = DatabaseManager(configs=configs)
         else:
             llm_manager, llm_manager_tool = get_default_llm_managers()
             # collector_config = PatientCollectorConfig(

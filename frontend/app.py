@@ -10,6 +10,9 @@ from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
 from helper_gui import trials_gui
 
+# Add OmegaConf import for config loading
+from omegaconf import OmegaConf
+
 
 # Optional backend imports; deferred until needed
 def ensure_path_exists(path: Path, factory, *args, **kwargs):
@@ -31,30 +34,28 @@ def make_absolute(relative: str) -> Path:
     return p if p.is_absolute() else Path(__file__).parent.parent / p
 
 
-def create_workflow_manager(demo: bool):
+def create_workflow_manager(demo: bool, configs=None):
     """
     Build and return the WorkflowManager (demo or production).
     """
     if demo:
         from demo_graph import create_demo_graph
-
         # Demo returns a compiled graph directly, not a WorkflowManager
         return create_demo_graph()
 
     # Import here to avoid circular imports
     import os
-
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
     from backend.my_agent.llm_manager import LLMManager
     from backend.my_agent.workflow_manager import WorkflowManager
 
-    # Create LLM managers
-    llm_manager, llm_manager_tool = LLMManager.get_default_managers()
+    # Use passed configs
+    llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+    llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
 
     # Create and return workflow manager
     workflow_manager = WorkflowManager(
-        llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
+        llm_manager=llm_manager, llm_manager_tool=llm_manager_tool, configs=configs
     )
     return workflow_manager
 
@@ -69,23 +70,27 @@ def main():
     parser.add_argument("--demo", action="store_true")
     args = parser.parse_args()
 
-    # Ensure necessary databases
+    # Load configs at the top
     import os
+    from omegaconf import OmegaConf
+    configs_path = os.path.join(os.path.dirname(__file__), "..", "config", "config.yaml")
+    configs = OmegaConf.load(configs_path)
 
+    # Ensure necessary databases
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     from backend.my_agent.database_manager import DatabaseManager
 
-    db_manager = DatabaseManager()
-    patients_db = make_absolute("sql_server/patients.db")
+    db_manager = DatabaseManager(configs=configs)
+    patients_db = make_absolute(os.path.join(configs.directories.sql_server, "patients.db"))
     ensure_path_exists(patients_db, db_manager.create_demo_patient_database)
 
-    trials_csv = make_absolute("data/trials_data.csv")
+    trials_csv = make_absolute(configs.files.trials_csv)
     ensure_path_exists(
         trials_csv, db_manager.create_trials_dataset, status="recruiting"
     )
 
     # Build workflow manager
-    workflow_manager = create_workflow_manager(demo=args.demo)
+    workflow_manager = create_workflow_manager(demo=args.demo, configs=configs)
     if not workflow_manager:
         sys.exit("❌ Failed to create workflow manager. Try --demo for testing.")
 

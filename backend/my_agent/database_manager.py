@@ -79,14 +79,14 @@ class DatabaseManager:
     """
 
     def __init__(
-        self, project_root: Optional[str] = None, config: Optional[DictConfig] = None
+        self, project_root: Optional[str] = None, configs: Optional[DictConfig] = None
     ):
         """
         Initialize the DatabaseManager.
 
         Args:
             project_root: Path to the project root directory. If None, will be inferred.
-            config: Optional Hydra config for overriding paths
+            configs: Optional Hydra config for overriding paths
         """
         if project_root is None:
             # Infer project root from current file location
@@ -94,10 +94,10 @@ class DatabaseManager:
             self.project_root = os.path.dirname(os.path.dirname(current_dir))
         else:
             self.project_root = project_root
-        # If config is provided, use it for paths
-        if config is not None:
-            dirs = config.directories
-            files = config.files
+        # If configs is provided, use it for paths
+        if configs is not None:
+            dirs = configs.directories
+            files = configs.files
             self.default_db_path = os.path.join(
                 self.project_root, dirs.sql_server, "patients.db"
             )

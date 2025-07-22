@@ -151,12 +151,12 @@ class PatientCollectorConfig:
         llm_manager: LLMManager,
         llm_manager_tool: LLMManager = None,
         db_path="sql_server/patients.db",
-        config: Optional[DictConfig] = None,
+        configs: Optional[DictConfig] = None,
     ):
         self.llm_manager = llm_manager
         self.llm_manager_tool = llm_manager_tool or llm_manager
-        if config is not None:
-            self.db_path = os.path.join(config.directories.sql_server, "patients.db")
+        if configs is not None:
+            self.db_path = os.path.join(configs.directories.sql_server, "patients.db")
             self.model = llm_manager.current
             self.model_tool = self.llm_manager_tool.current
         else:
@@ -166,13 +166,13 @@ class PatientCollectorConfig:
         self._setup_profile_chain()
 
     @classmethod
-    def from_config(cls, config: DictConfig) -> "PatientCollectorConfig":
+    def from_config(cls, configs: DictConfig) -> "PatientCollectorConfig":
         from .llm_manager import LLMManager
 
-        llm_manager = LLMManager.from_config(config, use_tool_models=False)
-        llm_manager_tool = LLMManager.from_config(config, use_tool_models=True)
+        llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+        llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
         return cls(
-            llm_manager=llm_manager, llm_manager_tool=llm_manager_tool, config=config
+            llm_manager=llm_manager, llm_manager_tool=llm_manager_tool, configs=configs
         )
 
     def _setup_profile_chain(self):
