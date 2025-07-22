@@ -1,14 +1,14 @@
 # LLM Pharma - Clinical Trial Management System
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
-[![LangChain](https://img.shields.io/badge/LangChain-0.1+-green.svg)](https://langchain.com/)
-[![LangGraph](https://img.shields.io/badge/LangGraph-0.1+-orange.svg)](https://langchain.com/langgraph)
-[![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o-purple.svg)](https://openai.com/)
-[![Nomic](https://img.shields.io/badge/Nomic-GPT4All%20Embeddings-darkgreen.svg)](https://nomic.ai/)
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
+[![LangChain](https://img.shields.io/badge/LangChain-0.3+-green.svg)](https://langchain.com/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.4+-orange.svg)](https://langchain.com/langgraph)
+[![Groq](https://img.shields.io/badge/Groq-LLM%20Provider-purple.svg)](https://groq.com/)
+[![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o-blue.svg)](https://openai.com/)
+[![Nomic](https://img.shields.io/badge/Nomic-Embeddings-darkgreen.svg)](https://nomic.ai/)
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Store-red.svg)](https://chromadb.com/)
 [![Gradio](https://img.shields.io/badge/Gradio-Web%20UI-yellow.svg)](https://gradio.app/)
 [![SQLite](https://img.shields.io/badge/SQLite-Database-lightgrey.svg)](https://sqlite.org/)
-[![Database Creation](https://img.shields.io/badge/Database-Creation%20Tools-brightgreen.svg)](https://sqlite.org/)
 [![Hydra](https://img.shields.io/badge/Hydra-Config%20Management-9cf.svg)](https://hydra.cc/)
 [![Poetry](https://img.shields.io/badge/Poetry-Dependency%20Management-cyan.svg)](https://python-poetry.org/)
 [![Pytest](https://img.shields.io/badge/Pytest-Testing-green.svg)](https://pytest.org/)
@@ -27,15 +27,15 @@ LLM Pharma is an intelligent clinical trial management system that automates the
 
 ## 🛠️ Tech Stack
 
-- **Python 3.9+**: Core programming language
+- **Python 3.12+**: Core programming language
 - **LangChain**: Framework for building LLM applications
 - **LangGraph**: Workflow orchestration and agent management
-- **OpenAI GPT-4o**: Large Language Model provider
-- **Nomic**: Local GPT4All-based embeddings for semantic search
+- **Groq**: Primary LLM provider with multiple model options
+- **OpenAI**: Alternative LLM provider for GPT models
+- **Nomic**: Embeddings for semantic search
 - **ChromaDB**: Vector database for semantic search
 - **Gradio**: Web interface framework
 - **SQLite**: Relational database for patient data
-- **Database Creation Tools**: Tools for creating and managing databases
 - **Hydra**: Configuration management
 - **Poetry**: Dependency management
 - **Pytest**: Testing framework
@@ -44,21 +44,28 @@ LLM Pharma is an intelligent clinical trial management system that automates the
 
 The system is built using a modular architecture with the following key components:
 
-### Backend Modules
+### Backend Modules (`backend/my_agent/`)
 - **WorkflowManager**: Orchestrates the LangGraph-based evaluation workflow
-- **LLMManager**: Handles all LLM operations and prompt management
-- **DatabaseManager**: Manages SQLite patient database operations
-- **VectorStoreManager**: Handles ChromaDB vector stores for policies and trials
-- **RetrievalManager**: Implements semantic search and self-query retrieval using Nomic GPT4All embeddings
-- **GradingManager**: Provides trial relevance grading and hallucination detection
-- **ToolManager**: Manages Python tools for date calculations and policy evaluation
+- **LLMManager**: Handles multiple LLM models with fallback logic (Groq/OpenAI)
+- **DatabaseManager**: Manages SQLite patient database and ChromaDB vector stores
+- **PolicyService**: Handles policy evaluation and eligibility assessment
+- **TrialService**: Manages trial matching and relevance scoring
+- **PatientCollector**: Handles patient data collection and profile generation
+- **State Management**: TypedDict-based workflow state management
 
-### Frontend
-- **Gradio Web Interface**: Interactive dashboard for patient evaluation
+### Frontend (`frontend/`)
+- **Gradio Web Interface**: Interactive dashboard with multi-tab results
 - **Real-time Processing**: Live workflow execution with status updates
-- **Multi-tab Results**: Detailed views for profiles, policies, and trial matches
+- **Thread Management**: Multi-session support with state persistence
+- **Demo Mode**: Dummy workflow for testing and demonstration
 
-### Configuration
+### Data Setup (`scripts/`)
+- **Master Setup Script**: Complete data initialization
+- **Patients Database Creator**: SQLite database with demo patients
+- **Policies Vector Store Creator**: ChromaDB for institutional policies
+- **Trials Vector Store Creator**: ChromaDB for clinical trials data
+
+### Configuration (`config/`)
 - **Hydra Configuration**: Centralized config management with YAML files
 - **Environment Management**: Secure API key and settings management
 
@@ -66,10 +73,9 @@ The system is built using a modular architecture with the following key componen
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.12+
 - Poetry (for dependency management)
-- OpenAI API key
-- LangChain API key (optional, for tracing)
+- Groq API key (primary) or OpenAI API key (alternative)
 
 ### Installation
 
@@ -86,67 +92,68 @@ The system is built using a modular architecture with the following key componen
 3. **Set up environment variables**:
    ```bash
    # Create .env file with your API keys
-   echo "OPENAI_API_KEY=your_openai_api_key_here" > .env
-   echo "LANGCHAIN_API_KEY=your_langchain_api_key_here" >> .env
+   echo "GROQ_API_KEY=your_groq_api_key_here" > .env
+   echo "OPENAI_API_KEY=your_openai_api_key_here" >> .env
    ```
 
-4. **Initialize the database** (optional):
+4. **Set up data** (required for first run):
    ```bash
-   make run --init-db
+   make setup-data
    ```
 
 ### Running the Application
 
 #### Web Interface (Recommended)
 ```bash
-make run-frontend
+make run
 ```
 Then visit `http://127.0.0.1:7958` in your browser.
 
-#### Command Line Interface
+#### Demo Mode (for testing)
 ```bash
-make run
+python frontend/app.py --demo
 ```
 
-#### With Custom Prompt
+#### With Custom Configuration
 ```bash
-poetry run python -m llm_pharma.main --prompt "Is patient 2 eligible for any medical trial?"
+python frontend/app.py --host 0.0.0.0 --port 8080 --share
 ```
 
 ## 📁 Project Structure
 
 ```
 llm_pharma/
-├── src/llm_pharma/           # Main application code
-│   ├── __init__.py           # Package initialization
-│   ├── main.py               # Main entry point
-│   ├── state.py              # Agent state management
-│   ├── database_manager.py   # SQLite database operations
-│   ├── llm_manager.py        # LLM operations and chains
-│   ├── workflow_manager.py   # LangGraph workflow orchestration
-│   ├── helper_functions.py   # Utility functions
-│   ├── agent_instructions.py # Prompts and instructions
-│   ├── agents/               # Specialized agent modules
-│   │   ├── __init__.py
-│   │   ├── vectorstore_manager.py
-│   │   ├── retrieval_manager.py
-│   │   ├── grading_manager.py
-│   │   └── tool_manager.py
-│   └── frontend/             # Gradio web interface
-│       ├── __init__.py
-│       └── app.py
-├── config/                   # Hydra configuration files
-│   ├── config.yaml          # Main configuration
-│   ├── model/               # Model configurations
-│   ├── database/            # Database configurations
-│   ├── vectorstore/         # Vector store configurations
-│   ├── retrieval/           # Retrieval configurations
-│   ├── agent/               # Agent configurations
-│   └── frontend/            # Frontend configurations
+├── backend/                  # Backend modules
+│   ├── my_agent/            # Core agent modules
+│   │   ├── workflow_manager.py    # LangGraph workflow orchestration
+│   │   ├── llm_manager.py         # Multi-model LLM management
+│   │   ├── database_manager.py    # Database and vector store operations
+│   │   ├── policy_service.py      # Policy evaluation and tools
+│   │   ├── trial_service.py       # Trial matching and scoring
+│   │   ├── patient_collector.py   # Patient data collection
+│   │   └── State.py               # Workflow state management
+│   └── README.md            # Backend documentation
+├── frontend/                # Gradio web interface
+│   ├── app.py               # Main frontend application
+│   ├── helper_gui.py        # Comprehensive Gradio interface
+│   ├── demo_graph.py        # Demo mode with dummy workflow
+│   └── README.md            # Frontend documentation
+├── scripts/                 # Data setup scripts
+│   ├── setup_all_data.py    # Master setup script
+│   ├── create_patients_database.py      # Patients database creator
+│   ├── create_policies_vectorstore.py   # Policies vector store creator
+│   ├── create_trials_vectorstore.py     # Trials vector store creator
+│   └── README.md            # Scripts documentation
+├── config/                  # Configuration files
+│   └── config.yaml          # Main configuration
 ├── tests/                   # Test suite
-│   ├── conftest.py          # Shared test fixtures
 │   ├── unit/                # Unit tests
-│   └── integration/         # Integration tests
+│   ├── integration/         # Integration tests
+│   └── regression/          # Regression tests
+├── data/                    # Data files
+├── vector_store/            # ChromaDB vector stores
+├── sql_server/              # SQLite databases
+├── source_data/             # Source documents
 ├── pyproject.toml           # Poetry configuration
 ├── Makefile                 # Development automation
 └── README.md               # This file
@@ -157,32 +164,29 @@ llm_pharma/
 The system uses Hydra for configuration management. Key configuration files:
 
 - `config/config.yaml`: Main configuration file
-- `config/model/openai.yaml`: OpenAI model settings
-- `config/database/sqlite.yaml`: Database configuration
-- `config/vectorstore/chroma.yaml`: Vector store settings
-- `config/agent/clinical_trial.yaml`: Workflow parameters
+- Environment variables: `GROQ_API_KEY`, `OPENAI_API_KEY`
 
 ### Key Configuration Options
 
 ```yaml
 # Model settings
-model:
-  model_id: "gpt-3.5-turbo"
-  agent_model_id: "gpt-4o"
-  temperature: 0.0
+models:
+  agent_models:
+    - id: "mistral-saba-24b"
+      provider: "groq"
+  tool_models:
+    - id: "llama-3.3-70b-versatile"
+      provider: "groq"
 
-# Workflow limits
-agent:
-  workflow:
-    max_revisions: 10
-    max_trial_searches: 3
+# Directory paths
+directories:
+  sql_server: "sql_server"
+  vector_store: "vector_store"
 
-# Retrieval parameters  
-retrieval:
-  policy_retrieval:
-    k: 5  # Number of policies to retrieve
-  trial_retrieval:
-    k: 6  # Number of trials to retrieve
+# File paths
+files:
+  policy_markdown: "source_data/instut_trials_policy.md"
+  trials_csv: "data/trials_data.csv"
 ```
 
 ## 🎯 Usage Examples
@@ -191,7 +195,7 @@ retrieval:
 
 1. **Start the web interface**:
    ```bash
-   make run-frontend
+   make run
    ```
 
 2. **Enter a patient query**:
@@ -200,21 +204,24 @@ retrieval:
    ```
 
 3. **Review results** in the detailed tabs:
-   - Patient Profile: Generated patient summary
-   - Policy Evaluation: Institutional policy compliance
-   - Trial Matches: Relevant clinical trials with explanations
+   - **Agent Tab**: Workflow control and status
+   - **Patient Profile**: Generated patient summary (editable)
+   - **Policy Evaluation**: Institutional policy compliance
+   - **Trials Summary**: Overview of matched trials
+   - **Potential Trials**: Detailed trial information
+   - **Trials Scores**: Comprehensive scoring and ranking
 
 ### Programmatic Usage
 
 ```python
 from omegaconf import OmegaConf
-from llm_pharma.workflow_manager import WorkflowManager
+from backend.my_agent.workflow_manager import WorkflowManager
 
 # Load configuration
 config = OmegaConf.load("config/config.yaml")
 
 # Initialize workflow manager
-workflow_manager = WorkflowManager(config)
+workflow_manager = WorkflowManager.from_config(config)
 
 # Run evaluation
 result = workflow_manager.run_workflow(
@@ -223,17 +230,18 @@ result = workflow_manager.run_workflow(
 )
 
 # Process results
-for node_name, node_result in result.items():
-    print(f"{node_name}: {node_result}")
+print(f"Patient ID: {result['patient_id']}")
+print(f"Policy Eligible: {result['policy_eligible']}")
+print(f"Trials Found: {result['trial_found']}")
 ```
 
 ## 🧪 Testing
 
-The project includes comprehensive unit and integration tests:
+The project includes comprehensive unit, integration, and regression tests:
 
 ```bash
 # Run all tests
-make test
+make test-all
 
 # Run unit tests only
 make test-unit
@@ -241,63 +249,63 @@ make test-unit
 # Run integration tests only  
 make test-integration
 
-# Run tests with coverage report
-make test
+# Run regression tests
+make test-regression
 ```
 
 ### Test Coverage
 
-- **Helper Functions**: Disease mapping, data validation, formatting
-- **Database Manager**: CRUD operations, query execution, statistics
-- **LLM Manager**: Model initialization, chain creation, prompt management
-- **Vector Store Manager**: Document processing, embedding operations
-- **Workflow Manager**: Node execution, state management, error handling
+- **Unit Tests**: Individual module functionality
+- **Integration Tests**: Module interaction testing
+- **Regression Tests**: End-to-end workflow validation
 
 ## 🔄 Development Workflow
 
 ### Available Make Commands
 
 ```bash
-make install       # Install production dependencies
-make dev-install   # Install development dependencies
-make run          # Run main application
-make run-frontend # Run Gradio frontend
-make lint         # Run linting (flake8, mypy)
-make format       # Format code (black, isort)
-make test         # Run tests with coverage
-make check        # Run all checks (lint + format + test)
-make clean        # Clean up build artifacts
+make install            # Install production dependencies
+make dev-install        # Install development dependencies
+make run               # Run Gradio frontend
+make setup-data        # Set up all data (patients, policies, trials)
+make test-all          # Run all tests
+make test-unit         # Run unit tests only
+make test-integration  # Run integration tests only
+make test-regression   # Run regression tests
+make lint              # Run linting (ruff)
+make format            # Format code (black, isort)
+make check             # Run all checks (lint + format + test)
+make clean             # Clean up build artifacts
 ```
 
 ### Code Quality Tools
 
+- **Ruff**: Fast Python linter
 - **Black**: Code formatting
 - **isort**: Import sorting
-- **flake8**: Linting
-- **mypy**: Type checking
 - **pytest**: Testing framework
 
 ## 📊 Features
 
 ### Core Capabilities
 
-- **Patient Data Management**: SQLite database with full CRUD operations
-- **Semantic Search**: ChromaDB vector stores with Nomic GPT4All embeddings for high-quality semantic retrieval
-- **LLM-Powered Analysis**: OpenAI GPT models for profile generation and evaluation
-- **Policy Evaluation**: Automated compliance checking with Python tools
-- **Trial Matching**: Intelligent matching with relevance scoring
-- **Hallucination Prevention**: Advanced grading to ensure factual responses
+- **Patient Data Management**: SQLite database with 100+ demo patients
+- **Semantic Search**: ChromaDB vector stores with Nomic embeddings
+- **Multi-Model LLM**: Groq and OpenAI integration with fallback logic
+- **Policy Evaluation**: Automated compliance checking with ReAct agent
+- **Trial Matching**: Intelligent matching with metadata filtering
+- **Hallucination Prevention**: Advanced grading with verification
 - **Interactive Interface**: Modern web UI with real-time processing
 
 ### Advanced Features
 
-- **Self-Query Retrieval**: Metadata-aware trial search with GPT4All embeddings
+- **Self-Query Retrieval**: Metadata-aware trial search
 - **Multi-step Workflows**: LangGraph-based agent orchestration  
 - **Tool Integration**: Date calculations and numerical operations
 - **Profile Rewriting**: Adaptive profile enhancement for better matches
-- **Conversation Tracking**: Thread-based session management
-- **Comprehensive Logging**: Detailed execution tracking
-- **Local Embeddings**: Privacy-preserving semantic search using Nomic's GPT4All-based embedding models
+- **Thread Management**: Multi-session support with state persistence
+- **Demo Mode**: Dummy workflow for testing and demonstration
+- **Configuration Management**: Hydra-based flexible configuration
 
 ## 🔒 Security & Privacy
 
@@ -308,10 +316,18 @@ make clean        # Clean up build artifacts
 
 ## 📈 Performance
 
-- **Parallel Processing**: Concurrent tool execution where possible
+- **Model Fallback**: Automatic switching between LLM providers
 - **Caching**: Vector store persistence for faster retrieval
 - **Optimized Queries**: Efficient database operations
 - **Memory Management**: SQLite checkpointing for workflow state
+
+## 📚 Documentation
+
+For detailed information about specific components:
+
+- **[Backend Documentation](backend/README.md)**: Core modules and workflow
+- **[Frontend Documentation](frontend/README.md)**: Web interface and usage
+- **[Scripts Documentation](scripts/README.md)**: Data setup and management
 
 ## 🤝 Contributing
 
@@ -339,7 +355,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - **LangChain & LangGraph**: For the agent framework and workflow orchestration
-- **OpenAI**: For the powerful LLM capabilities
+- **Groq**: For fast and reliable LLM inference
+- **OpenAI**: For the powerful GPT model capabilities
 - **ChromaDB**: For vector database functionality
 - **Gradio**: For the interactive web interface
 - **Hydra**: For configuration management
@@ -349,7 +366,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For questions, issues, or contributions:
 
 1. **Check the Issues**: Look for existing issues or create a new one
-2. **Documentation**: Review this README and inline documentation
+2. **Documentation**: Review component-specific README files
 3. **Tests**: Run the test suite to verify functionality
 4. **Configuration**: Check your configuration files and environment variables
 
@@ -360,7 +377,7 @@ For questions, issues, or contributions:
 - **Advanced Analytics**: Trial success prediction and patient outcome analysis
 - **Integration APIs**: RESTful APIs for external system integration
 - **Scalability**: Distributed processing and cloud deployment options
-- **Embedding Optimization**: Fine-tuning of GPT4All embeddings for clinical domain specificity
+- **Embedding Optimization**: Fine-tuning of embeddings for clinical domain specificity
 
 ---
 
