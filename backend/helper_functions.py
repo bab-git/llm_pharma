@@ -1,33 +1,30 @@
 """
 LLM Pharma Helper Functions
 
-This module contains the complete implementation of the patient collector and policy evaluator nodes
+This module contains the complete implementation of the policy evaluator, trial search, and trial grading nodes
 and supporting functions for the LLM Pharma clinical trial workflow system.
 
 COMPLETED FEATURES:
 ==================
 
-1. Patient Collector Node - COMPLETED
-   - Extracts patient ID from natural language prompts
-   - Fetches patient data from SQLite database
-   - Generates patient profile for clinical trial screening
-   - Uses Groq model for free LLM inference
-
-2. Policy Evaluator Node - COMPLETED
+1. Policy Evaluator Node - COMPLETED
    - Evaluates patient eligibility against institutional policies
    - Converts policy documents into yes/no questions
    - Uses structured tools for date and number comparisons
    - Provides detailed rejection reasons for ineligible patients
 
-3. Demo Patient Database - COMPLETED
-   - Pre-populated SQLite database with 100 sample patients
-   - Includes medical history, trial participation, demographics
-   - Automatic database creation and management
+2. Policy Search Node - COMPLETED
+   - Retrieves relevant institutional policies based on patient profile
+   - Uses vector search to find matching policy documents
 
-4. Configuration System - COMPLETED
-   - PatientCollectorConfig class for model and database setup
-   - Support for both OpenAI and Groq models
-   - Flexible database path configuration
+3. Trial Search Node - COMPLETED
+   - Searches for relevant clinical trials based on patient profile
+   - Uses self-query retriever for intelligent trial matching
+
+4. Trial Grading Node - COMPLETED
+   - Evaluates trial relevance to patient profile
+   - Checks for LLM hallucinations in trial assessments
+   - Provides detailed relevance scores and explanations
 
 5. Policy Tools - COMPLETED
    - Date comparison and calculation tools
@@ -38,36 +35,38 @@ USAGE EXAMPLE:
 ==============
 
     from helper_functions import (
-        initialize_patient_collector_system,
-        patient_collector_node,
         policy_evaluator_node,
+        policy_search_node,
+        trial_search_node,
+        grade_trials_node
+    )
+    from patient_collector import (
+        patient_collector_node,
         create_agent_state
     )
-    
-    # Initialize the system
-    config = initialize_patient_collector_system(use_free_model=True)
     
     # Create initial state
     state = create_agent_state()
     state['patient_prompt'] = "I need information about patient 1"
     
-    # Run patient collector
+    # Run patient collector (from patient_collector module)
     result = patient_collector_node(state)
     
-    # Run policy evaluator
+    # Run policy search and evaluation
     state.update(result)
-    state['unchecked_policies'] = [policy_document]  # Add policy documents
+    policy_search_result = policy_search_node(state)
+    state.update(policy_search_result)
     policy_result = policy_evaluator_node(state)
     
-    print(f"Patient ID: {result['patient_id']}")
-    print(f"Profile: {result['patient_profile']}")
     print(f"Policy Eligible: {policy_result['policy_eligible']}")
 
 TESTING:
 ========
 
-Run the test script:
-    python backend/test_patient_collector.py
+Run the test scripts:
+    python backend/test_policy_evaluator.py
+    python backend/test_policy_search.py
+    python backend/test_trial_search.py
 
 REQUIREMENTS:
 =============
@@ -79,13 +78,11 @@ Make sure you have these environment variables set:
 Install required packages:
     pip install langchain-groq langchain-openai langchain-core langgraph
 
-TODO - PLACEHOLDER NODES:
-=========================
+NOTE:
+=====
 
-The following nodes still need implementation:
-- trial_search_node
-- grade_trials_node
-- profile_rewriter_node
+Patient collector functionality has been moved to the patient_collector.py module.
+Import patient_collector_node and related functions from that module instead.
 
 """
 
@@ -129,12 +126,20 @@ _ = load_dotenv(find_dotenv()) # read local .env file
 # import chromadb
 from langchain.chains.query_constructor.base import AttributeInfo
 from langchain.retrievers.self_query.base import SelfQueryRetriever
-from backend.my_agent.llm_manager import LLMManager
-from backend.my_agent.database_manager import DatabaseManager
+from my_agent.llm_manager import LLMManager
+from my_agent.database_manager import DatabaseManager
 
-class Patient_ID(BaseModel):
-    """Model for extracting patient ID from user prompt."""
-    patient_id: int
+# Import patient collector functionality from the new module
+from patient_collector import (
+    PatientCollectorConfig,
+    patient_collector_node,
+    profile_rewriter_node,
+    create_agent_state,
+    Patient_ID,
+    AgentState
+)
+
+# Patient_ID moved to patient_collector.py module
 
 class eligibility(BaseModel):
     """Give the patient's eligibility result."""
@@ -176,37 +181,11 @@ class GradeHallucinations(BaseModel):
     Reason: str = Field(description="Reasons to the given relevance score.")
 
 # Helper to get default LLMManagers for completions and tool calls
-# This function is now deprecated - use LLMManager.get_default_managers() instead
 def get_default_llm_managers():
-    from .my_agent.llm_manager import LLMManager
+    from my_agent.llm_manager import LLMManager
     return LLMManager.get_default_managers()
 
-class PatientCollectorConfig:
-    """Configuration for patient collector node."""
-    def __init__(self, llm_manager: LLMManager, llm_manager_tool: LLMManager = None, db_path="sql_server/patients.db"):
-        self.llm_manager = llm_manager
-        self.llm_manager_tool = llm_manager_tool or llm_manager
-        self.db_path = db_path
-        self.model = llm_manager.current
-        self.model_tool = self.llm_manager_tool.current
-        self._setup_profile_chain()
-
-    def _setup_profile_chain(self):
-        """Setup the chain for patient profile generation."""
-        parser = StrOutputParser()
-        prompt_profile = PromptTemplate(
-            template="""
-            You are the Clinical Research Coordinator in the screening phase of a clinical trial. 
-            Use the following patient data to write the patient profile for the screening phase.
-            The patient profile is a summary of the patient's information in continuous text form.    
-            If they had no previous trial participation, exclude trial status and trial completion date.\n
-            Do not ignore any available information.\n 
-            Also suggest medical trials that can be related to patient's disease history.\n    
-            Write the patient profile in 3 to 4 short sentences.\n\n
-            {patient_data}""",
-            input_variables=["patient_data"],
-        )
-        self.chain_profile = prompt_profile | self.model | parser
+# PatientCollectorConfig moved to patient_collector.py module
 
 # Database functions moved to DatabaseManager class
 # Use DatabaseManager().create_demo_patient_database() instead
@@ -214,60 +193,7 @@ class PatientCollectorConfig:
 # Database functions moved to DatabaseManager class
 # Use DatabaseManager().get_patient_data(patient_id) instead
 
-class AgentState(TypedDict):
-    """State definition for the LLM Pharma workflow agent."""
-    last_node: str
-    patient_prompt: str
-    patient_id: int
-    patient_data: dict
-    patient_profile: str
-    policy_eligible: bool
-    policies: List[Document]
-    checked_policy: Document
-    unchecked_policies: List[Document]
-    policy_qs: str
-    rejection_reason: str    
-    revision_number: int
-    max_revisions: int
-    trial_searches: int
-    max_trial_searches: int            
-    trials: List[Document]
-    relevant_trials: list[dict]
-    ask_expert: str
-    trial_found: bool
-    error_message: str
-    selected_model: str
-
-def create_agent_state() -> AgentState:
-    """
-    Create the initial agent state for the LLM Pharma workflow.
-    
-    Returns:
-        AgentState: Initial state with default values
-    """
-    return {
-        "last_node": "",
-        "patient_prompt": "",
-        "patient_id": 0,
-        "patient_data": {},
-        "patient_profile": "",
-        "policy_eligible": False,
-        "policies": [],
-        "checked_policy": None,
-        "unchecked_policies": [],
-        "policy_qs": "",
-        "rejection_reason": "",
-        "revision_number": 0,
-        "max_revisions": 3,
-        "trial_searches": 0,
-        "max_trial_searches": 2,
-        "trials": [],
-        "relevant_trials": [],
-        "ask_expert": "",
-        "trial_found": False,
-        "error_message": "",
-        "selected_model": "llama-3.3-70b-versatile"
-    }
+# AgentState and create_agent_state moved to patient_collector.py module
 
 def policy_tools(policy_qs: str, patient_profile: str, model_agent, llm_manager_tool):
     """
@@ -386,81 +312,7 @@ Available tools: {tool_names}
 # Workflow creation functions moved to WorkflowManager class
 # Use WorkflowManager() instead of these functions
 
-
-
-# Placeholder node functions (to be implemented with actual logic)
-# --- Update all node functions to use both managers ---
-def patient_collector_node(state: AgentState) -> dict:
-    """
-    Patient collector node that extracts patient ID from prompt, fetches patient data,
-    and generates patient profile.
-    """
-    try:
-        llm_manager, llm_manager_tool = get_default_llm_managers()
-        config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
-
-        patient_data_prompt = """You are a helpful assistance in extracting patient's medical history.\nBased on the following request identify and return the patient's ID number.\n"""
-
-        def run_id_extraction():
-            current_model = llm_manager_tool.current
-            return current_model.with_structured_output(Patient_ID).invoke([
-                SystemMessage(content=patient_data_prompt),
-                HumanMessage(content=state['patient_prompt'])
-            ])
-        response = llm_manager_tool.invoke_with_fallback(run_id_extraction, reset=True)
-        patient_id = response.patient_id
-        print(f"Patient ID: {patient_id}")
-
-        db_manager = DatabaseManager()
-        patient_data = db_manager.get_patient_data(patient_id)
-        print(patient_data)
-
-        if patient_data is not None:
-            if patient_data.get('name'):
-                del patient_data['patient_id']
-                del patient_data['name']
-            def run_profile_chain():
-                current_model = llm_manager.current
-                parser = StrOutputParser()
-                prompt_profile = PromptTemplate(
-                    template="""
-                    You are the Clinical Research Coordinator in the screening phase of a clinical trial. 
-                    Use the following patient data to write the patient profile for the screening phase.
-                    The patient profile is a summary of the patient's information in continuous text form.    
-                    If they had no previous trial participation, exclude trial status and trial completion date.\n
-                    Do not ignore any available information.\n 
-                    Also suggest medical trials that can be related to patient's disease history.\n    
-                    Write the patient profile in 3 to 4 short sentences.\n\n
-                    {patient_data}""",
-                    input_variables=["patient_data"],
-                )
-                profile_chain = prompt_profile | current_model | parser
-                return profile_chain.invoke({'patient_data': patient_data})
-            patient_profile = llm_manager.invoke_with_fallback(run_profile_chain, reset=False)
-        else:
-            patient_profile = ""
-            print(f"No patient found with ID: {patient_id}")
-
-        return {
-            "last_node": "patient_collector",
-            "patient_data": patient_data or {},
-            "patient_profile": patient_profile,
-            "patient_id": patient_id,
-            "revision_number": state.get("revision_number", 0) + 1,
-            "policy_eligible": False
-        }
-    except Exception as e:
-        print(f"❌ Error in patient collection: {e}")
-        # error_message = extract_error_message(e, "patient collection")
-        return {
-            "last_node": "patient_collector",
-            "patient_data": {},
-            "patient_profile": "",
-            "patient_id": 0,
-            "revision_number": state.get("revision_number", 0) + 1,
-            "policy_eligible": False,
-            "error_message": str(e) if e else ""
-        }
+# Patient collector node moved to patient_collector.py module
 
 # Policy vector store function moved to DatabaseManager class
 # Use DatabaseManager().create_policy_vectorstore() instead
@@ -820,67 +672,7 @@ def grade_trials_node(state: AgentState) -> dict:
             "error_message": str(e) if e else ""
         }
 
-# --- Fix profile_rewriter_node ---
-def profile_rewriter_node(state: AgentState) -> dict:
-    try:
-        llm_manager, llm_manager_tool = get_default_llm_managers()
-        config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
-        patient_data = state.get("patient_data", {})
-        if not patient_data:
-            print("⚠️ No patient data available for profile rewriting")
-            return {
-                'last_node': 'profile_rewriter',
-                'patient_profile': state.get("patient_profile", ""),
-                "policy_eligible": state.get("policy_eligible", False)
-            }
-        def run_profile_rewrite():
-            current_model = llm_manager.current
-            system = """
-A trial cross match resulted in no trials for the patient.
-As a clinical specialist write a medical profile for this patient and see if their disease(s) can be relevant to any of these categories of mental_health, cancer, or leukemia.
-If yes, then suggest relevant medical trial categories for the agent.
-If no, then do not add anything there.
-
-Your output must be as below:
-<a text summary of original profile>
-Suggested relevant trials:
-<bullet points of relevant medical trial categories from the above with a one line reason>
-
-Only include categories which can be related to patient diseases in more often cases.
-Disregard categories which occasionally or in some cases can be relevant to patient diseases.
-
-example:
-The patient is a X-year-old with a medical history of Y. They have participated ........  previous trials, and their trial status and completion date .........
-Suggested relevant trials:
-category X: [patient's disease] can be related to X due to Y.
-"""
-            re_write_prompt = ChatPromptTemplate.from_messages(
-                [
-                    ("system", system),
-                    (
-                        "human",
-                        "Here is a patient data:\n\n {patient_data} \n write a patient profile.",
-                    ),
-                ]
-            )
-            profile_rewriter_chain = re_write_prompt | current_model | StrOutputParser()
-            return profile_rewriter_chain.invoke({"patient_data": patient_data})
-        patient_profile_rewritten = llm_manager.invoke_with_fallback(run_profile_rewrite, reset=True)
-        print("--- PROFILE REWRITER: PATIENT'S PROFILE REWRITTEN ---")
-        return {
-            'last_node': 'profile_rewriter',
-            'patient_profile': patient_profile_rewritten,
-            "policy_eligible": state.get("policy_eligible", False)
-        }
-    except Exception as e:
-        print(f"❌ Error in profile rewriting: {e}")
-        # error_message = extract_error_message(e, "profile rewriting")
-        return {
-            'last_node': 'profile_rewriter',
-            'patient_profile': state.get("patient_profile", ""),
-            "policy_eligible": state.get("policy_eligible", False),
-            "error_message": str(e) if e else ""
-        }
+# Profile rewriter node moved to patient_collector.py module
 
 
 
