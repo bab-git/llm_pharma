@@ -30,7 +30,7 @@ from .database_manager import DatabaseManager
 from .llm_manager import LLMManager
 
 # Import functions from helper_functions - these will be imported when needed to avoid circular imports
-from .patient_collector import AgentState, create_agent_state
+from .State import AgentState, create_agent_state
 from .trial_service import grade_trials_node, trial_search_node
 
 

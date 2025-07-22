@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from .database_manager import DatabaseManager
 from .llm_manager import LLMManager
-from .patient_collector import AgentState
+from .State import AgentState
 
 
 def safe_invoke(retriever, question, retries=2):

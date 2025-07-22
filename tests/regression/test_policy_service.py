@@ -57,7 +57,7 @@ def test_policy_service():
         # Test 3: Test standalone functions
         print("\n3. Testing standalone policy functions...")
         from my_agent.database_manager import DatabaseManager
-        from my_agent.patient_collector import create_agent_state
+        from backend.my_agent.State import create_agent_state
 
         # Create demo database first
         db_manager = DatabaseManager()

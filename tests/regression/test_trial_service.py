@@ -6,7 +6,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 
-from backend.my_agent.patient_collector import create_agent_state
+from backend.my_agent.State import create_agent_state
 from backend.my_agent.trial_service import grade_trials_node, trial_search_node
 
 
