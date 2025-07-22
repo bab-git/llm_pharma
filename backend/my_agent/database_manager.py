@@ -67,8 +67,6 @@ from typing import Any, Dict, List, Optional
 
 import chromadb
 import pandas as pd
-from langchain.chains.query_constructor.base import AttributeInfo
-from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_nomic import NomicEmbeddings
@@ -674,43 +672,43 @@ class DatabaseManager:
         policy_vectorstore = self.create_policy_vectorstore()
         return policy_vectorstore.as_retriever(search_kwargs={"k": k})
 
-    def get_trial_retriever(self, llm_model, patient_profile: str):
-        """
-        Get a self-query retriever for trial documents based on patient profile.
+    # def get_trial_retriever(self, llm_model, patient_profile: str):
+    #     """
+    #     Get a self-query retriever for trial documents based on patient profile.
 
-        Args:
-            llm_model: LLM model for self-query retrieval
-            patient_profile: Patient profile to match against trials
+    #     Args:
+    #         llm_model: LLM model for self-query retrieval
+    #         patient_profile: Patient profile to match against trials
 
-        Returns:
-            SelfQueryRetriever for trial documents
-        """
-        trial_vectorstore = self.create_trial_vectorstore()
+    #     Returns:
+    #         SelfQueryRetriever for trial documents
+    #     """
+    #     trial_vectorstore = self.create_trial_vectorstore()
 
-        metadata_field_info = [
-            AttributeInfo(
-                name="disease_category",
-                description="Defines the disease group of patients related to this trial. One of ['cancer', 'leukemia', 'mental_health']",
-                type="string",
-            ),
-            AttributeInfo(
-                name="drugs",
-                description="List of drug names used in the trial",
-                type="str",
-            ),
-        ]
-        document_content_description = (
-            "The list of patient conditions to include or exclude them from the trial"
-        )
+    #     metadata_field_info = [
+    #         AttributeInfo(
+    #             name="disease_category",
+    #             description="Defines the disease group of patients related to this trial. One of ['cancer', 'leukemia', 'mental_health']",
+    #             type="string",
+    #         ),
+    #         AttributeInfo(
+    #             name="drugs",
+    #             description="List of drug names used in the trial",
+    #             type="str",
+    #         ),
+    #     ]
+    #     document_content_description = (
+    #         "The list of patient conditions to include or exclude them from the trial"
+    #     )
 
-        question = f"""
-        Which trials are relevant to the patient with the following medical history?\n
-        patient_profile: {patient_profile}
-        """
+    #     question = f"""
+    #     Which trials are relevant to the patient with the following medical history?\n
+    #     patient_profile: {patient_profile}
+    #     """
 
-        return SelfQueryRetriever.from_llm(
-            llm_model,
-            trial_vectorstore,
-            document_content_description,
-            metadata_field_info,
-        )
+    #     return SelfQueryRetriever.from_llm(
+    #         llm_model,
+    #         trial_vectorstore,
+    #         document_content_description,
+    #         metadata_field_info,
+    #     )

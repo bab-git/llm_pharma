@@ -44,7 +44,7 @@ def run_script(script_name, args=None, config_path=None, config_name=None):
     print(f"Command: {' '.join(cmd)}")
 
     try:
-        result = subprocess.run(cmd, check=True, capture_output=False)
+        subprocess.run(cmd, check=True, capture_output=False)
         print(f"✅ {script_name} completed successfully!")
         return True
     except subprocess.CalledProcessError as e:

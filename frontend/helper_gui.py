@@ -95,12 +95,12 @@ class trials_gui:
         if error_message:
             return error_message
 
-        policy_eligible = current_state.values.get("policy_eligible", None)
+        # policy_eligible = current_state.values.get("policy_eligible", None)
         trial_found = current_state.values.get("trial_found")
         trials = current_state.values.get("trials", [])
 
         # Special cases first
-        if trial_found == True:
+        if trial_found is True:
             return "🎉 Trial Scores - Perfectly Matched clinical trials have been found! 🎉"
         elif last_node == "grade_trials":
             return """⚠️ Trials Scores - No matched trials found. Please review the relevance scores for more details.
@@ -108,7 +108,7 @@ Your options:
    A - Continue with auto-generated profile rewriter --> Continue Evaluation,
    B - Manually modify the patient profile to better match trials."""
         elif last_node == "trial_search" and trials == []:
-            if nnode == None:
+            if nnode is None:
                 return "Agent Tab - The pipeline couldn't find any potential/relevant trials. Try another patient."
         elif last_node == "profile_rewriter":
             return "Go to Profile Tab - The patient profile has been rewritten by the agent to increase the chances of finding relevant trials. You can also manually modify the patient profile."
@@ -332,7 +332,7 @@ Your options:
             else:
                 raise ValueError("key should be 'relevant_trials' or 'trials'")
 
-        last_node = state_values["last_node"]
+        # last_node = state_values["last_node"]
         df = pd.DataFrame(columns=["no data available"])
 
         if key == "trials_scores":
@@ -396,7 +396,7 @@ Your options:
             # Concise agent tab explanation with two columns
             with gr.Row():
                 with gr.Column(scale=1):
-                    agent_info_left = gr.Markdown(
+                    gr.Markdown(
                         value="""## 🤖 Agent Control Center
 
 **Start Here:**
@@ -411,7 +411,7 @@ Your options:
                         visible=True,
                     )
                 with gr.Column(scale=1):
-                    agent_info_right = gr.Markdown(
+                    gr.Markdown(
                         value="""## Process Overview:
 
 - 🔍 **Profile Creation:** Generate a patient profile
@@ -589,7 +589,7 @@ Your options:
 
         # 3. Trials Summary Table
         with gr.Column(elem_id="trials-summary-section"):
-            trials_summary_heading = gr.Markdown(
+            gr.Markdown(
                 value="""## 🎯 Trials Summary (NCT ID | Diseases | Relevance)
 
 You can obtain more information about each trial's details and possible relevance reasons in the **Potential Trials** and **Trials Scores** tabs."""
@@ -631,7 +631,7 @@ You can obtain more information about each trial's details and possible relevanc
 
         with gr.Tab("Potential Trials"):
             # Add informative text at the top of the Matched Trials tab
-            matched_trials_info = gr.Markdown(
+            gr.Markdown(
                 value="""## 🎯 Matched Clinical Trials
 
 **📊 View trials** that match the patient's profile after policy evaluation.
@@ -663,7 +663,7 @@ You can obtain more information about each trial's details and possible relevanc
 
         with gr.Tab("Trials Scores"):
             # Add informative text at the top of the Trials Scores tab
-            trials_scores_info = gr.Markdown(
+            gr.Markdown(
                 value="""## 📊 Trial Eligibility Scores
 
 **🏆 Final results** - Detailed scoring and ranking of matched trials.
@@ -746,7 +746,7 @@ You can obtain more information about each trial's details and possible relevanc
     def refresh_all_status(self, skip_policy_status_update=False):
         """Refresh all the status components."""
         state_values = self.get_current_state_values()
-        last_node = state_values.get("last_node", "")
+        # last_node = state_values.get("last_node", "")
         profile_ready = (
             state_values
             and "patient_profile" in state_values
@@ -923,7 +923,7 @@ You can obtain more information about each trial's details and possible relevanc
             last_node, nnode, _, rev, acount = self.get_disp_state()
 
             # Default: don't update
-            policies_update = gr.update()
+            # policies_update = gr.update()
             policy_issue_update = gr.update()
             trials_update = gr.update()
 
@@ -1028,7 +1028,7 @@ You can obtain more information about each trial's details and possible relevanc
         )
         new_state = self.graph.get_state(self.thread)  # should now match
         new_thread_ts = new_state.config["configurable"]["thread_ts"]
-        tid = new_state.config["configurable"]["thread_id"]
+        # tid = new_state.config["configurable"]["thread_id"]
         revision_number = new_state.values["revision_number"]
         last_node = new_state.values["last_node"]
         rev = new_state.values["revision_number"]
@@ -1090,7 +1090,7 @@ You can obtain more information about each trial's details and possible relevanc
         ) as demo:
 
             # Add app description at the very top
-            app_description = gr.Markdown(value=self.APP_DESCRIPTION, visible=True)
+            # app_description = gr.Markdown(value=self.APP_DESCRIPTION, visible=True)
 
             # Build all UI components
             agent_components = self.build_agent_tab()
