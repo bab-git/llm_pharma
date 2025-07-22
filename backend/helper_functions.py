@@ -123,13 +123,14 @@ import ast
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv()) # read local .env file
 
-from langchain_community.vectorstores import Chroma
-from langchain_nomic import NomicEmbeddings
-import chromadb
-import json
-from langchain.chains.query_constructor.base import AttributeInfo
-from langchain.retrievers.self_query.base import SelfQueryRetriever
+# Vector store imports moved to DatabaseManager
+# from langchain_community.vectorstores import Chroma
+# from langchain_nomic import NomicEmbeddings
+# import chromadb
+# from langchain.chains.query_constructor.base import AttributeInfo
+# from langchain.retrievers.self_query.base import SelfQueryRetriever
 from backend.my_agent.llm_manager import LLMManager
+from backend.my_agent.database_manager import DatabaseManager
 
 class Patient_ID(BaseModel):
     """Model for extracting patient ID from user prompt."""
@@ -223,171 +224,11 @@ class PatientCollectorConfig:
         )
         self.chain_profile = prompt_profile | self.model | parser
 
-def create_demo_patient_database(db_path="sql_server/patients.db"):
-    """
-    Create a demo patient database with randomly generated patient data.
-    
-    Args:
-        db_path (str): Path where the database file will be created
-    
-    Returns:
-        pandas.DataFrame: DataFrame containing the generated patient data
-    """
-    import pandas as pd
-    from datetime import datetime, timedelta
-    import numpy as np
-    import json
-    import random
-    import os
-    
-    # Convert to absolute path relative to the project root
-    if not os.path.isabs(db_path):
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        db_path = os.path.join(project_root, db_path)
-    
-    # Ensure the directory exists
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    
-    # Remove existing database if it exists
-    if os.path.exists(db_path):
-        os.remove(db_path)
-    
-    # Define columns for the database
-    columns = ["patient_id", "name", "age", "medical_history", "previous_trials", "trial_status", "trial_completion_date"]
-    data = []
+# Database functions moved to DatabaseManager class
+# Use DatabaseManager().create_demo_patient_database() instead
 
-    # Given names and surnames
-    names = ["John", "Jane", "Alice", "Michael", "Emily", "Daniel", "Sophia", "James", "Emma", "Oliver"]
-    surnames = ["Doe", "Smith", "Johnson", "Brown", "Davis", "Garcia", "Martinez", "Anderson", "Thomas", "Wilson"]
-
-    # Generate all possible unique combinations of names and surnames
-    combinations = [(name, surname) for name in names for surname in surnames]
-
-    # Shuffle the combinations to ensure randomness
-    random.shuffle(combinations)
-
-    # Select the first 100 unique combinations
-    unique_names = combinations[:100]
-
-    # Generate the full names
-    full_names = [f"{name} {surname}" for name, surname in unique_names]
-
-    # Load diseases from the JSON file
-    diseases_file_path = os.path.join(os.path.dirname(__file__), '..', 'source_data', 'diseases_list.json')
-    try:
-        with open(diseases_file_path, 'r') as file:
-            trial_diseases = json.load(file)
-        
-        list_trial_diseases = list({disease for diseases in trial_diseases.values() for disease in diseases})
-    except FileNotFoundError:
-        # Fallback if diseases file not found
-        list_trial_diseases = ["myelomonocytic leukemia", "myeloid leukemia", "lymphoblastic leukemia", 
-                              "colorectal cancer", "esophageal cancer", "gastric cancer"]
-
-    other_medical_conditions = ["Hypertension", "Diabetes", "Asthma", "Heart Disease", "Arthritis",
-                          "Chronic Pain", "Anxiety", "Depression", "Obesity"]
-
-    all_conditions = list(set(list_trial_diseases + other_medical_conditions))
-
-    trial_statuses = ["Completed", "Ongoing", "Withdrawn"]
-
-    def random_date(start, end):
-        return start + timedelta(days=random.randint(0, int((end - start).days)))
-
-    # start_date must be 2 years before now
-    start_date = datetime.now() - timedelta(days=365 * 2)
-
-    # end_date must be a month before now
-    end_date = datetime.now() - timedelta(days=10)
-
-    # Generate 100 patients
-    for i in range(1, 101):
-        name = random.choice(full_names)
-        age = random.randint(20, 80)
-        medical_history = random.choice(all_conditions)
-        
-        # 50% chance of having previous trials
-        if random.choice([True, False]):
-            previous_trials = f"NCT0{random.randint(1000000, 9999999)}"
-            trial_status = random.choice(trial_statuses)
-            trial_completion_date = random_date(start_date, end_date).strftime('%Y-%m-%d')
-        else:
-            previous_trials = ""
-            trial_status = ""
-            trial_completion_date = ""
-        
-        # If trial is ongoing, no completion date
-        if trial_status == "Ongoing":
-            trial_completion_date = ""
-
-        data.append((i, name, age, medical_history, previous_trials, trial_status, trial_completion_date))
-
-    # Create DataFrame
-    df = pd.DataFrame(data, columns=columns)
-    
-    # Save DataFrame to CSV in the same directory as the database
-    csv_path = db_path.replace('.db', '.csv').replace('sql_server', 'data')
-    df.to_csv(csv_path, index=False)
-    
-    # Create SQLite database
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # Create the patients table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS patients (
-        patient_id INTEGER PRIMARY KEY,
-        name TEXT,
-        age INTEGER,
-        medical_history TEXT,
-        previous_trials TEXT,
-        trial_status TEXT,
-        trial_completion_date TEXT
-    )
-    ''')
-
-    # Insert DataFrame into SQLite table
-    df.to_sql('patients', conn, if_exists='append', index=False)
-
-    # Commit and close the connection
-    conn.commit()
-    conn.close()
-    
-    print(f"Demo patient database created at: {db_path}")
-    print(f"CSV export created at: {csv_path}")
-    print(f"Total patients created: {len(df)}")
-    
-    return df
-
-def get_patient_data(patient_id: int, db_path="sql_server/patients.db") -> dict:
-    """
-    Fetch all fields for the patient based on the given patient_id as an integer.
-
-    Args:
-        patient_id: The patient ID to fetch data for
-        db_path: Path to the SQLite database file
-
-    Returns:
-        A dictionary containing the patient's medical history, or None if not found.        
-    """
-    # Convert to absolute path relative to the project root
-    if not os.path.isabs(db_path):
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        db_path = os.path.join(project_root, db_path)
-        
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()    
-    query = 'SELECT * FROM patients WHERE patient_id=?'
-    cursor.execute(query, (patient_id,))
-    patient_data = cursor.fetchone()
-    column_names = [column[0] for column in cursor.description]
-    conn.close()
-    
-    if patient_data is None:
-        return None
-    else:    
-        results = dict(zip(column_names, patient_data))    
-    return results
+# Database functions moved to DatabaseManager class
+# Use DatabaseManager().get_patient_data(patient_id) instead
 
 class AgentState(TypedDict):
     """State definition for the LLM Pharma workflow agent."""
@@ -664,7 +505,8 @@ def patient_collector_node(state: AgentState) -> dict:
         patient_id = response.patient_id
         print(f"Patient ID: {patient_id}")
 
-        patient_data = get_patient_data(patient_id, config.db_path)
+        db_manager = DatabaseManager()
+        patient_data = db_manager.get_patient_data(patient_id)
         print(patient_data)
 
         if patient_data is not None:
@@ -714,235 +556,11 @@ def patient_collector_node(state: AgentState) -> dict:
             "error_message": str(e) if e else ""
         }
 
-def create_policy_vectorstore(policy_file_path="source_data/instut_trials_policy.md", 
-                            vectorstore_path="vector_store", 
-                            collection_name="policies"):
-    """
-    Create a vector store from the institutional policy document.
-    
-    Args:
-        policy_file_path: Path to the policy markdown file
-        vectorstore_path: Path to store the vector database
-        collection_name: Name of the collection in the vector store
-        
-    Returns:
-        Chroma: The created vector store
-    """
-    # Convert to absolute paths relative to the project root
-    if not os.path.isabs(policy_file_path):
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        policy_file_path = os.path.join(project_root, policy_file_path)
-    
-    if not os.path.isabs(vectorstore_path):
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        vectorstore_path = os.path.join(project_root, vectorstore_path)
-    
-    # Ensure vector store directory exists
-    os.makedirs(vectorstore_path, exist_ok=True)
-    
-    # Read the policy document
-    with open(policy_file_path, 'r', encoding='utf-8') as file:
-        policy_content = file.read()
-    
-    # Split the policy into sections (by headers)
-    sections = []
-    current_section = ""
-    current_title = ""
-    
-    for line in policy_content.split('\n'):
-        if line.startswith('####'):
-            # Save previous section if exists
-            if current_section.strip():
-                sections.append({
-                    'title': current_title,
-                    'content': current_section.strip()
-                })
-            # Start new section
-            current_title = line.replace('####', '').strip()
-            current_section = ""
-        else:
-            current_section += line + "\n"
-    
-    # Add the last section
-    if current_section.strip():
-        sections.append({
-            'title': current_title,
-            'content': current_section.strip()
-        })
-    
-    # Create documents for vector store
-    policy_docs = []
-    for section in sections:
-        doc = Document(
-            page_content=section['content'],
-            metadata={
-                "title": section['title'],
-                "source": "institutional_policy"
-            }
-        )
-        policy_docs.append(doc)
-    
-    # Create persistent client
-    persistent_client = chromadb.PersistentClient(path=vectorstore_path)
-    
-    # Create or load vector store
-    vectorstore = Chroma(
-        client=persistent_client,
-        collection_name=collection_name,
-        embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
-    )
-    
-    # Check if collection is empty and add documents if needed
-    if vectorstore._collection.count() == 0:
-        vectorstore = Chroma.from_documents(
-            documents=policy_docs,
-            client=persistent_client,
-            collection_name=collection_name,
-            embedding=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
-        )
-        print(f"✅ Policy vector store created with {len(policy_docs)} sections")
-    else:
-        print(f"✅ Policy vector store loaded with {vectorstore._collection.count()} documents")
-    
-    return vectorstore
+# Policy vector store function moved to DatabaseManager class
+# Use DatabaseManager().create_policy_vectorstore() instead
 
-def create_trial_vectorstore(trials_csv_path="data/trials_data.csv",
-                           vectorstore_path="vector_store",
-                           collection_name="trials",
-                           status_filter="recruiting",
-                           vstore_delete=False):
-    """
-    Create a vector store from the clinical trials dataset.
-    
-    Args:
-        trials_csv_path: Path to the trials CSV file
-        vectorstore_path: Path to store the vector database
-        collection_name: Name of the collection in the vector store
-        status_filter: Filter trials by status (e.g., 'recruiting')
-        
-    Returns:
-        Chroma: The created vector store
-    """
-    import ast
-    
-    # Convert to absolute paths relative to the project root
-    if not os.path.isabs(trials_csv_path):
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        trials_csv_path = os.path.join(project_root, trials_csv_path)
-    
-    if not os.path.isabs(vectorstore_path):
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        vectorstore_path = os.path.join(project_root, vectorstore_path)
-    
-    # Ensure vector store directory exists
-    os.makedirs(vectorstore_path, exist_ok=True)
-    
-    # Create persistent client
-    persistent_client = chromadb.PersistentClient(path=vectorstore_path)
-
-    if vstore_delete == True:
-        try:
-            persistent_client.delete_collection(collection_name)
-            print(f"Collection {collection_name} is deleted")
-        except Exception:
-            print(f"Collection {collection_name} does not exist.")
-
-    # Create or load vector store
-    vectorstore = Chroma(
-        client=persistent_client,
-        collection_name=collection_name,
-        embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
-    )
-
-
-    # if vstore_delete == True:
-    #     vectorstore.delete_collection()
-    #     vectorstore = Chroma(
-    #         client=persistent_client,
-    #         collection_name=collection_name,
-    #         embedding_function=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
-    #     )    
-    #     print("vstore deleted")
-
-    if vectorstore._collection.count() > 0:        
-        print(f"✅ Trial vector store loaded with {vectorstore._collection.count()} trials")
-        return vectorstore
-    
-    
-    # Read trials data
-    df_trials = pd.read_csv(trials_csv_path)
-    # Convert 'diseases' and 'drugs' columns from string to list
-
-    df_trials['diseases'] = df_trials['diseases'].apply(ast.literal_eval)
-    # df_trials['drugs'] = df_trials['drugs'].apply(ast.literal_eval)
-
-    print(trials_csv_path)
-    print(f"loaded trials: {len(df_trials)}")
-    
-    # Filter by status if specified
-    if status_filter:
-        df_trials = df_trials[df_trials['status'] == status_filter].reset_index(drop=True)
-        print(f"✅ Filtered trials to status '{status_filter}': {len(df_trials)} trials")
-    
-    # Create documents for vector store
-    trial_docs = []
-    for i, row in df_trials.iterrows():
-        disease = disease_map(row['diseases'])
-        if disease == 'other_conditions':
-            continue
-        doc = Document(
-            page_content=row['criteria'],
-            metadata={
-                "nctid": row['nctid'],
-                "status": row['status'],
-                # "why_stop": row['why_stop'],
-                # "label": row['label'],
-                # "phase": row['phase'],
-                "diseases": str(row['diseases']),
-                "disease_category": disease[0],
-                "drugs": row['drugs'],            
-            }
-        )
-        trial_docs.append(doc)
-    print(f"sample trial doc metadata:\n {trial_docs[0].metadata}")
-
-    # Remove documents with very long content (>10000 characters)
-    # trial_docs = [doc for doc in trial_docs if len(doc.page_content) <= 10000]
-
-    list_remove = set()
-    for i, doc in enumerate(trial_docs):
-        if len(doc.page_content)>10000:
-            print(f"removing trial {i} because it's too long")
-            list_remove.add(i)
-            # print(doc.metadata)
-        if doc.metadata['disease_category'] == 'other_conditions':
-            print(f"removing trial {i} because it's for other conditions")
-            list_remove.add(i)
-            # print(doc.metadata)
-    # remove list_remove indexes from trial_docs
-    trial_docs = [doc for i, doc in enumerate(trial_docs) if i not in list_remove]
-
-    print(f"Number of trial docs to be added to the vector store: {len(trial_docs)}")
-    if len(trial_docs) == 0:
-        print(f"No trials to add to the vector store")
-        return None
-        
-    
-
-    # Check if collection is empty and add documents if needed
-    # if vectorstore._collection.count() == 0:
-    vectorstore = Chroma.from_documents(
-        documents=trial_docs,
-        client=persistent_client,
-        collection_name=collection_name,
-        # persist_directory=vectorstore_path,
-        embedding=NomicEmbeddings(model="nomic-embed-text-v1.5", inference_mode='local'),
-    )
-    print(f"✅ Trial vector store created with {len(trial_docs)} trials")
-    # else:
-    #     print(f"✅ Trial vector store loaded with {vectorstore._collection.count()} trials")
-    
-    return vectorstore
+# Trial vector store function moved to DatabaseManager class
+# Use DatabaseManager().create_trial_vectorstore() instead
 
 def policy_search_node(state: AgentState) -> dict:
     """
@@ -970,7 +588,8 @@ def policy_search_node(state: AgentState) -> dict:
             }
         
         # Create or load policy vector store
-        policy_vectorstore = create_policy_vectorstore()
+        db_manager = DatabaseManager()
+        policy_vectorstore = db_manager.create_policy_vectorstore()
         
         # Create retriever
         retriever = policy_vectorstore.as_retriever(search_kwargs={"k": 5})
@@ -1112,7 +731,8 @@ def trial_search_node(state: AgentState) -> dict:
                 'trial_searches': state.get('trial_searches', 0) + 1,
                 "policy_eligible": state.get("policy_eligible", False)
             }
-        trial_vectorstore = create_trial_vectorstore()
+        db_manager = DatabaseManager()
+        trial_vectorstore = db_manager.create_trial_vectorstore()
         print(f"Number of trials in the vector store: {trial_vectorstore._collection.count()}")
         metadata_field_info = [
             AttributeInfo(
@@ -1406,99 +1026,10 @@ def should_continue_trials(state: AgentState) -> str:
         return END
 
 
-def dataset_create_trials(status = None):
-    """
-    Creates a dataset of clinical trials by downloading a CSV file from a GitHub repository and preprocessing it.
-
-    Args:
-        dataset_name (str): The name of the dataset. This argument is not used in the function.
-
-    Returns:
-        tuple: A tuple containing two elements:
-            - df_trials (pandas.DataFrame): The preprocessed dataset of clinical trials.
-            - csv_path (str): The path to the CSV file where the dataset is saved.
-
-    Raises:
-        None
-
-    Notes:
-        - The function downloads a CSV file from the GitHub repository 'futianfan/clinical-trial-outcome-prediction'
-          located at 'https://raw.githubusercontent.com/futianfan/clinical-trial-outcome-prediction/main/data/raw_data.csv'.
-        - The downloaded CSV file is read into a pandas DataFrame called 'df_trials'.
-        - The 'diseases' column of the DataFrame is converted from a string representation of lists to actual lists using the 'ast.literal_eval' function.
-        - The 'label' column of the DataFrame is mapped to the strings 'success' if the value is 1, and 'failure' if the value is 0.
-        - The 'why_stop' column of the DataFrame is filled with the string 'not stopped' where the value is null.
-        - The 'smiless' and 'icdcodes' columns of the DataFrame are dropped.
-        - The preprocessed DataFrame is saved to a CSV file located at '../data/trials_data.csv'.
-        - The path to the saved CSV file is stored in the 'csv_path' variable.
-        - The function prints the path to the saved CSV file and the number of rows in the DataFrame.
-    """
-
-    import pandas as pd
-    import ast
-
-    # URL to the raw_data.csv file
-    url = 'https://raw.githubusercontent.com/futianfan/clinical-trial-outcome-prediction/main/data/raw_data.csv'
-
-    # Read the CSV file directly into a pandas DataFrame
-    df_trials = pd.read_csv(url)
-
-    if status is not None:
-        df_trials = df_trials[df_trials['status'] == status].reset_index(drop=True)
-        print(f'Only trials with status {status} are selected.')
-
-    # Convert the string representation of lists to actual lists
-    df_trials['diseases'] = df_trials['diseases'].apply(ast.literal_eval)
-    # df_trials['drugs'] = df_trials['drugs'].apply(ast.literal_eval) 
-
-    # map lable = 1 to success and lable = 0 to failure
-    df_trials['label'] = df_trials['label'].map({1: 'success', 0: 'failure'})
-
-    # map why_stop null to not_stopped
-    df_trials['why_stop'] = df_trials['why_stop'].fillna('not stopped')
-    # df_trials.head()
-    
-    df_trials = df_trials.drop(columns=['smiless','icdcodes'])
-
-    # create ../data if it doesn't exist
-    if not os.path.exists('data'):
-        os.makedirs('data')
-        
-    df_trials.to_csv('data/trials_data.csv', index=False)
-    csv_path = 'data/trials_data.csv'
-    print(f'The database for trials is saved to {csv_path} \n It has {len(df_trials)} rows.')
-    
-    return df_trials, csv_path
+# Dataset creation function moved to DatabaseManager class
+# Use DatabaseManager().create_trials_dataset(status) instead
 
 
 
-def disease_map(disease_list):
-    # read disease_mapping from a file    
-    import json
-    
-    # Convert to absolute path relative to the project root
-    disease_mapping_path = 'source_data/disease_mapping.json'
-    if not os.path.isabs(disease_mapping_path):
-        project_root = os.path.dirname(os.path.dirname(__file__))
-        disease_mapping_path = os.path.join(project_root, disease_mapping_path)
-    
-    with open(disease_mapping_path, 'r') as file:
-        disease_mapping =  json.load(file)
-
-    categories = set()
-    for disease in disease_list:
-        if disease in disease_mapping:
-            mapped = disease_mapping[disease]
-            if mapped != 'other_conditions':
-                # mapped = disease 
-                categories.add(mapped)
-            elif 'cancer' in disease:
-                mapped = 'cancer'
-            elif 'leukemia' in disease:
-                mapped = 'leukemia'            
-        # else:
-        #     mapped = 'other_conditions'
-            # categories.add(disease)
-    if len(categories) == 0:
-        categories.add('other_conditions')
-    return list(categories)
+# Disease mapping function moved to DatabaseManager class
+# Use DatabaseManager().disease_map(disease_list) instead

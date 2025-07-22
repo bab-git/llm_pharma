@@ -21,7 +21,7 @@ from pathlib import Path
 # Add the parent directory to the path to import helper_functions
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.helper_functions import create_demo_patient_database
+from backend.my_agent.database_manager import DatabaseManager
 
 def main():
     """Main function to create the patients database."""
@@ -71,7 +71,8 @@ Examples:
     try:
         # Create the database
         print(f"📊 Creating patients database at: {db_path}")
-        df = create_demo_patient_database(str(db_path))
+        db_manager = DatabaseManager()
+        df = db_manager.create_demo_patient_database(str(db_path))
         
         print("\n✅ Database creation completed successfully!")
         print(f"📁 Database location: {db_path}")

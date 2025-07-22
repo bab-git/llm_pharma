@@ -23,7 +23,7 @@ from pathlib import Path
 # Add the parent directory to the path to import helper_functions
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.helper_functions import create_policy_vectorstore
+from backend.my_agent.database_manager import DatabaseManager
 
 def main():
     """Main function to create the policies vector store."""
@@ -103,7 +103,8 @@ Examples:
         print(f"🗂️  Vector store path: {vectorstore_path}")
         print(f"📦 Collection name: {args.collection_name}")
         
-        vectorstore = create_policy_vectorstore(
+        db_manager = DatabaseManager()
+        vectorstore = db_manager.create_policy_vectorstore(
             policy_file_path=str(policy_file),
             vectorstore_path=str(vectorstore_path),
             collection_name=args.collection_name

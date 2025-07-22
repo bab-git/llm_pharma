@@ -18,10 +18,9 @@ def test_policy_search():
     try:
         from helper_functions import (
             create_agent_state,
-            policy_search_node,
-            create_policy_vectorstore,
-            create_trial_vectorstore
+            policy_search_node
         )
+        from my_agent.database_manager import DatabaseManager
         
         print("🧪 Testing Policy Search Node")
         print("=" * 50)
@@ -30,7 +29,8 @@ def test_policy_search():
         print("\n1. Testing vector store creation...")
         
         # Create policy vector store
-        policy_vs = create_policy_vectorstore()
+        db_manager = DatabaseManager()
+        policy_vs = db_manager.create_policy_vectorstore()
         print(f"✅ Policy vector store created with {policy_vs._collection.count()} documents")
                
         # Test 2: Test policy search with sample patient profile

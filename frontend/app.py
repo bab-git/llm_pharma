@@ -7,7 +7,7 @@ import sys
 import argparse
 from pathlib import Path
 from dotenv import load_dotenv, find_dotenv
-from frontend.helper_gui import trials_gui
+from helper_gui import trials_gui
 
 # Optional backend imports; deferred until needed
 def ensure_path_exists(path: Path, factory, *args, **kwargs):
@@ -65,15 +65,17 @@ def main():
     args = parser.parse_args()
 
     # Ensure necessary databases
-    from backend.helper_functions import (
-        create_demo_patient_database,
-        dataset_create_trials
-    )
+    import sys
+    import os
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    from backend.my_agent.database_manager import DatabaseManager
+    
+    db_manager = DatabaseManager()
     patients_db = make_absolute("sql_server/patients.db")
-    ensure_path_exists(patients_db, create_demo_patient_database, str(patients_db))
+    ensure_path_exists(patients_db, db_manager.create_demo_patient_database)
 
     trials_csv = make_absolute("data/trials_data.csv")
-    ensure_path_exists(trials_csv, dataset_create_trials, status='recruiting')
+    ensure_path_exists(trials_csv, db_manager.create_trials_dataset, status='recruiting')
 
     # Build workflow graph
     graph = create_workflow(demo=args.demo)

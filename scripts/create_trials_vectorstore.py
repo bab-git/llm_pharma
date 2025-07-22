@@ -24,7 +24,7 @@ from pathlib import Path
 # Add the parent directory to the path to import helper_functions
 sys.path.append(str(Path(__file__).parent.parent))
 
-from backend.helper_functions import dataset_create_trials, create_trial_vectorstore
+from backend.my_agent.database_manager import DatabaseManager
 
 def main():
     """Main function to create the trials data and vector store."""
@@ -124,7 +124,8 @@ Examples:
             print(f"📥 Downloading trials data...")
             print(f"🔍 Status filter: {args.status_filter}")
             
-            df_trials, csv_path = dataset_create_trials(status=args.status_filter)
+            db_manager = DatabaseManager()
+            df_trials, csv_path = db_manager.create_trials_dataset(status=args.status_filter)
             
             print(f"✅ Trials data downloaded successfully!")
             print(f"📁 CSV file location: {csv_path}")
@@ -148,7 +149,7 @@ Examples:
         print(f"📦 Collection name: {args.collection_name}")
         print(f"🔍 Status filter: {args.status_filter}")
         
-        vectorstore = create_trial_vectorstore(
+        vectorstore = db_manager.create_trial_vectorstore(
             trials_csv_path=str(trials_csv_path),
             vectorstore_path=str(vectorstore_path),
             collection_name=args.collection_name,
