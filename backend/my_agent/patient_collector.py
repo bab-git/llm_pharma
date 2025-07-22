@@ -63,14 +63,12 @@ from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from omegaconf import DictConfig
 from pydantic import BaseModel
 
-# Load environment variables
-_ = load_dotenv(find_dotenv())
-
 from .database_manager import DatabaseManager
 
 # Import from existing modules
 from .llm_manager import LLMManager
-
+# Load environment variables
+_ = load_dotenv(find_dotenv())
 
 class Patient_ID(BaseModel):
     """Model for extracting patient ID from user prompt."""
@@ -206,9 +204,9 @@ def patient_collector_node(state: AgentState) -> dict:
     """
     try:
         llm_manager, llm_manager_tool = get_default_llm_managers()
-        config = PatientCollectorConfig(
-            llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        )
+        # config = PatientCollectorConfig(
+        #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
+        # )
 
         patient_data_prompt = """You are a helpful assistance in extracting patient's medical history.\nBased on the following request identify and return the patient's ID number.\n"""
 
@@ -292,9 +290,9 @@ def profile_rewriter_node(state: AgentState) -> dict:
     """
     try:
         llm_manager, llm_manager_tool = get_default_llm_managers()
-        config = PatientCollectorConfig(
-            llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        )
+        # config = PatientCollectorConfig(
+        #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
+        # )
         patient_data = state.get("patient_data", {})
         if not patient_data:
             print("⚠️ No patient data available for profile rewriting")

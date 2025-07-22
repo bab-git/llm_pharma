@@ -1,0 +1,23 @@
+# Minimal configuration for LLM Pharma (Hydra compatible)
+
+models:
+  agent_models:
+    - id: mistral-saba-24b
+      provider: groq
+  tool_models:
+    - id: qwen/qwen3-32b
+      provider: groq
+  temperature: 0.0
+
+directories:
+  data: data
+  vector_store: vector_store
+  sql_server: sql_server
+  source_data: source_data
+
+files:
+  policy_markdown: source_data/instut_trials_policy.md
+  trials_csv: data/trials_data.csv
+  disease_mapping: source_data/disease_mapping.json
+
+# Add more config sections as needed 

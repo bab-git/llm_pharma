@@ -8,9 +8,10 @@ to the new patient_collector.py module.
 
 import os
 import sys
+# from pathlib import Path
 
 # Add the backend directory to the Python path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from backend.my_agent.patient_collector import (
     PatientCollectorConfig,
@@ -37,7 +38,7 @@ def test_patient_collector():
     print("\n2. Testing Patient_ID schema...")
     try:
         # This would normally be created by the LLM, but we can test the structure
-        patient_id_data = {"patient_id": 1}
+        # patient_id_data = {"patient_id": 1}
         print("✅ Patient_ID schema structure is valid")
     except Exception as e:
         print(f"❌ Error with Patient_ID schema: {e}")
@@ -45,7 +46,7 @@ def test_patient_collector():
     # Test 3: Test PatientCollectorConfig
     print("\n3. Testing PatientCollectorConfig...")
     try:
-        from my_agent.llm_manager import LLMManager
+        from backend.my_agent.llm_manager import LLMManager
 
         llm_manager, llm_manager_tool = LLMManager.get_default_managers()
         config = PatientCollectorConfig(

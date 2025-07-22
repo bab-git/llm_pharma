@@ -53,12 +53,9 @@ from typing import Optional
 from dotenv import find_dotenv, load_dotenv
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
-
-_ = load_dotenv(find_dotenv())  # read local .env file
 
 from omegaconf import DictConfig
 
@@ -66,6 +63,7 @@ from omegaconf import DictConfig
 from backend.my_agent.database_manager import DatabaseManager
 from backend.my_agent.patient_collector import AgentState, PatientCollectorConfig
 
+_ = load_dotenv(find_dotenv())  # read local .env file
 
 class PolicyEligibility(BaseModel):
     """Give the patient's eligibility result."""

@@ -40,10 +40,10 @@ def test_policy_service():
         from backend.my_agent.policy_service import (
             PolicyEligibility,
             PolicyService,
-            get_default_policy_service,
+            # get_default_policy_service,
             policy_evaluator_node,
             policy_search_node,
-            policy_tools,
+            # policy_tools,
         )
 
         print("✅ Successfully imported all PolicyService components")

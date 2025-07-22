@@ -392,6 +392,8 @@ class WorkflowManager:
                 return "policy_evaluator"
             else:
                 return "trial_search"
+        else:
+            return END
 
     def _should_continue_trials(self, state: AgentState) -> str:
         """Determine if trial search should continue."""

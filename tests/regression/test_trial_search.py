@@ -14,16 +14,17 @@ import sys
 
 from dotenv import find_dotenv, load_dotenv
 
-# Load environment variables
-_ = load_dotenv(find_dotenv())
+
 
 # Add the backend directory to the path so we can import helper_functions
 # sys.path.append(os.path.dirname(__file__))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from backend.my_agent.patient_collector import create_agent_state
 from backend.my_agent.trial_service import trial_search_node
 
+# Load environment variables
+_ = load_dotenv(find_dotenv())
 
 def test_trial_search_node():
     """
