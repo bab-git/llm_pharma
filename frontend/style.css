@@ -1,0 +1,50 @@
+/* Darker background for the entire profile section */
+#profile-section {
+    background-color: #2a3f54;  /* a deep slate blue */
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+/* target by ID */
+#notification_center textarea {
+    background-color: #b3d1ea;   /* less light, medium blue */
+    border: 2px solid #4a90e2;
+    color: #333;
+    font-size: 22px !important;
+}
+
+.main-container, .gradio-container {
+    max-width: 1200px !important;
+    margin: 0 auto !important;
+    padding: 20px !important;
+}
+
+.gradio-container, .main-container, body, html {
+    font-size: 22px !important;
+}
+
+.gr-textbox label, .gr-textbox textarea {
+    font-size: 22px !important;
+}
+
+/* Make the font of the profile textbox bigger */
+#profile-section textarea {
+   font-size: 20px !important;
+}
+
+/* Add a background for the Policy Conflict Resolution section */
+#policy-conflict-section {
+    background-color: #4B0000; /* very dark red */
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+/* Add a background for the Trials Summary section */
+#trials-summary-section {
+    background-color: #1a4d1a; /* dark green */
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+} 
