@@ -39,16 +39,16 @@ class LLMManager:
         """
         # You can customize these lists independently if needed
         model_list = [
-            # ("meta-llama/llama-4-maverick-17b-128e-instruct", "groq"), # Slow
-            # ("meta-llama/llama-4-scout-17b-16e-instruct", "groq"), # Slow
+            ("meta-llama/llama-4-maverick-17b-128e-instruct", "groq"),  # Slow
+            ("meta-llama/llama-4-scout-17b-16e-instruct", "groq"),  # Slow
             ("mistral-saba-24b", "groq"),
             # ("llama3-8b-8192", "groq"),
         ]
         tool_model_list = [
-            # ("llama-3.3-70b-versatile", "groq"), # Slow
-            # ("llama3-70b-8192", "groq"), # Slow
-            # ("deepseek-r1-distill-llama-70b", "groq"), # Slow
-            # ("moonshotai/kimi-k2-instruct", "groq"),
+            ("llama-3.3-70b-versatile", "groq"),  # Slow
+            ("llama3-70b-8192", "groq"),  # Slow
+            ("deepseek-r1-distill-llama-70b", "groq"),  # Slow
+            ("moonshotai/kimi-k2-instruct", "groq"),
             ("qwen/qwen3-32b", "groq"),  # fast
             # ("gemma2-9b-it", "groq"), # tool fails
             # ("llama-3.1-8b-instant", "groq"), # tool fails
@@ -91,6 +91,8 @@ class LLMManager:
                 )
             else:
                 raise ValueError(f"Unknown provider: {provider}")
+        # if self.clients:
+        #     print(f"---- [LLMManager] Current selected model ---- : {model_id}")
 
     @property
     def current(self):
@@ -103,11 +105,18 @@ class LLMManager:
     def advance(self) -> bool:
         if self.current_index + 1 < len(self.clients):
             self.current_index += 1
+            print(
+                f"[LLMManager] Switched to model: {self.model_configs[self.current_index]}"
+            )
             return True
         return False
 
     def reset(self):
         self.current_index = 0
+        if self.clients:
+            print(
+                f"[LLMManager] Reset to model: {self.model_configs[self.current_index]}"
+            )
 
     def invoke_with_fallback(
         self, runnable: Callable, *args, reset: bool = True, **kwargs

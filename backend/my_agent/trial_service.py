@@ -19,6 +19,15 @@ from .llm_manager import LLMManager
 from .patient_collector import AgentState
 
 
+def safe_invoke(retriever, question, retries=2):
+    for i in range(retries):
+        try:
+            return retriever.invoke(question)
+        except ValueError as e:
+            print(f"⚠️ JSON parse failed (attempt {i+1}), retrying…")
+    raise RuntimeError("Failed to parse JSON after retries")
+
+
 # --- Structured Output Schemas ---
 class grade(BaseModel):
     """The result of the trial's relevance check as relevance score and explanation."""
@@ -30,7 +39,7 @@ class grade(BaseModel):
     )
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "relevance_score": "Yes",
                 "explanation": "The patient has the target disease condition for this trial.",
@@ -109,7 +118,7 @@ def trial_search_node(state: AgentState, config: Optional[DictConfig] = None) ->
                 document_content_description,
                 metadata_field_info,
             )
-            return retriever_trial_sq.get_relevant_documents(question)
+            return safe_invoke(retriever_trial_sq, question)
 
         docs_retrieved = llm_manager.invoke_with_fallback(
             run_trial_retrieval, reset=True
@@ -168,27 +177,27 @@ def grade_trials_node(state: AgentState) -> dict:
             def run_trial_score():
                 current_model = llm_manager_tool.current
                 prompt_grader = PromptTemplate(
-                    template=""" 
+                    template="""
                     You are a Principal Investigator (PI) for evaluating patients for clinical trials.\n
                     Your task is to evaluate the relevance of a clinical trial to the given patient's medical profile. \n
                     The clinical trial is related to these diseases: {trial_diseases} \n
                     Here are the inclusion and exclusion criteria of the trial: \n\n {document} \n\n
-                    ===============                
+                    ===============
                     Use the following steps to determine relevance and provide the necessary fields in your response: \n
                     1- If the patient's profile meets any exclusion criteria, then the trial is not relevant --> relevance_score = 'No'. \n
-                    2- If the patient has or had the trial's inclusion diseases, then it is relevant --> relevance_score = 'Yes'.\n        
+                    2- If the patient has or had the trial's inclusion diseases, then it is relevant --> relevance_score = 'Yes'.\n
                     3- If the patient did not have the trial's inclusion diseases, then it is not relevant --> relevance_score = 'No'.\n
-                    Example 1: 
+                    Example 1:
             The patient has Arthritis and the trial is related to pancreatic cancer. --> relevance_score = 'No' \n
-                    Example 2: 
+                    Example 2:
             The patient has pancreatic cancer and the trial is also related to carcinoma pancreatic cancer. --> relevance_score = 'Yes' \n
-                    Example 3: 
-            The patient has pancreatic cancer and the trial is related to breast cancer or ovarian cancer. --> relevance_score = 'No'. \n 
+                    Example 3:
+            The patient has pancreatic cancer and the trial is related to breast cancer or ovarian cancer. --> relevance_score = 'No'. \n
                     Bring your justification in the explanation. \n
                     Mention further information that is needed from the patient's medical history related to the trial's criteria \n
                     ===============
                     Here is the patient's medical profile: {patient_profile} \n\n
-                    
+
                     Respond with:
                     - relevance_score: "Yes" or "No"
                     - explanation: Your reasoning
@@ -244,7 +253,7 @@ def grade_trials_node(state: AgentState) -> dict:
 
                 def run_hallucination():
                     current_model = llm_manager_tool.current
-                    system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n 
+                    system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
                          Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
                     hallucination_prompt = ChatPromptTemplate.from_messages(
                         [

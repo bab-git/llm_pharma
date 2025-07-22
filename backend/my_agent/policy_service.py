@@ -76,7 +76,7 @@ class PolicyEligibility(BaseModel):
     )
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "eligibility": "yes",
                 "reason": "N/A",
@@ -250,11 +250,11 @@ Available tools: {tool_names}
             # Fallback: evaluate without tools
             fallback_prompt = f"""
             As a Principal Investigator, evaluate this patient's eligibility:
-            
+
             Patient Profile: {patient_profile}
-            
+
             Policy Questions: {policy_qs}
-            
+
             Answer with 'yes' if eligible, 'no' if not eligible, and include reasoning.
             """
 
@@ -375,9 +375,9 @@ Available tools: {tool_names}
             def run_policy_qs():
                 current_model = self.llm_manager.current
                 prompt_rps = PromptTemplate(
-                    template=""" You are a Principal Investigator (PI) for clinical trials. 
+                    template=""" You are a Principal Investigator (PI) for clinical trials.
                         The following document contains a policy document about participation in clinical trials:\n\n{policy}\n\n
-                        Your task is to rephrase each single policy from the document above into a single yes/no question. 
+                        Your task is to rephrase each single policy from the document above into a single yes/no question.
                         Form each question so that a yes answer indicates the patient's ineligibility.
                         Do not create more questions than given number of policies.
 
