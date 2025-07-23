@@ -122,30 +122,12 @@ Examples:
         df_trials = None
         csv_path = None
 
-        # if trials_csv_path.exists():
-        #     print(f"📂 Found existing trials CSV file: {trials_csv_path}")
-        #     try:
-        #         import pandas as pd
-        #         df_trials = pd.read_csv(trials_csv_path)
-        #         csv_path = str(trials_csv_path)
-        #         print(f"✅ Successfully loaded existing trials data!")
-        #         print(f"📊 Total trials loaded: {len(df_trials)}")
-
-        #         # Display sample data
-        #         print(f"\n📋 Sample trials data:")
-        #         print(df_trials.head(3).to_string(index=False))
-
-        #     except Exception as e:
-        #         print(f"⚠️  Failed to load existing file: {e}")
-        #         print("🔄 Will download fresh data...")
-        #         df_trials = None
-
         if df_trials is None:
             print("📥 Downloading trials data...")
             print(f"🔍 Status filter: {args.status_filter}")
 
             db_manager = (
-                DatabaseManager(config=config)
+                DatabaseManager(configs=config)
                 if config is not None
                 else DatabaseManager()
             )

@@ -83,16 +83,16 @@ Examples:
         return
 
     # Load config if available
-    config = None
+    configs = None
     config_file = Path(args.config_path) / f"{args.config_name}.yaml"
     if config_file.exists():
-        config = OmegaConf.load(str(config_file))
+        configs = OmegaConf.load(str(config_file))
 
     try:
         # Create the database
         print(f"📊 Creating patients database at: {db_path}")
         db_manager = (
-            DatabaseManager(config=config) if config is not None else DatabaseManager()
+            DatabaseManager(configs=configs) if configs is not None else DatabaseManager()
         )
         df = db_manager.create_demo_patient_database(str(db_path))
 
