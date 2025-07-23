@@ -19,8 +19,8 @@ def test_policy_search():
     """Test the policy search functionality."""
     try:
         from backend.my_agent.database_manager import DatabaseManager
-        from backend.my_agent.State import create_agent_state
         from backend.my_agent.policy_service import policy_search_node
+        from backend.my_agent.State import create_agent_state
 
         print("🧪 Testing Policy Search Node")
         print("=" * 50)

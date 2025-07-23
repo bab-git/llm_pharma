@@ -4,8 +4,8 @@ Simplified LLM Pharma Frontend App
 """
 
 import argparse
-import sys
 import os
+import sys
 from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
@@ -41,6 +41,7 @@ def create_workflow_manager(demo: bool, configs=None):
     """
     if demo:
         from demo_graph import create_demo_graph
+
         # Demo returns a compiled graph directly, not a WorkflowManager
         return create_demo_graph()
 
@@ -75,8 +76,9 @@ def main():
 
     # Load configs at the top
     # import os
-    from omegaconf import OmegaConf
-    configs_path = os.path.join(os.path.dirname(__file__), "..", "config", "config.yaml")
+    configs_path = os.path.join(
+        os.path.dirname(__file__), "..", "config", "config.yaml"
+    )
     configs = OmegaConf.load(configs_path)
 
     # Ensure necessary databases
@@ -84,7 +86,9 @@ def main():
     from backend.my_agent.database_manager import DatabaseManager
 
     db_manager = DatabaseManager(configs=configs)
-    patients_db = make_absolute(os.path.join(configs.directories.sql_server, "patients.db"))
+    patients_db = make_absolute(
+        os.path.join(configs.directories.sql_server, "patients.db")
+    )
     ensure_path_exists(patients_db, db_manager.create_demo_patient_database)
 
     trials_csv = make_absolute(configs.files.trials_csv)

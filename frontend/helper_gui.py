@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
+
 import gradio as gr
 import pandas as pd
 
-
 root_path = Path(__file__).parent
 image_path = root_path / "static" / "image_source.jpg"
+
 
 class trials_gui:
     SENTINEL_NONE = "__NONE__"
@@ -116,7 +117,7 @@ Your options:
         elif last_node == "profile_rewriter":
             return "Go to Profile Tab - The patient profile has been rewritten by the agent to increase the chances of finding relevant trials. You can also manually modify the patient profile."
         elif last_node == "policy_evaluator":
-            if nnode == 'trial_search':
+            if nnode == "trial_search":
                 return "Continue Evaluation to see the trial search results."
 
         return self.NODE_NOTIFICATIONS.get(last_node, f"Agent is at: {last_node}")
@@ -184,9 +185,7 @@ Your options:
             if policy_eligible is True:
                 status_icon = "✅"
                 status_text = "PASSED"
-                policy_status = (
-                    f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
-                )
+                policy_status = f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
             elif policy_eligible is False:
                 status_icon = "❌"
                 status_text = "FAILED"
@@ -466,7 +465,10 @@ Your options:
                 )
                 cont_btn = gr.Button("Continue Evaluation", scale=0, min_width=120)
                 debug_mode = gr.Checkbox(
-                    label="🔧 Debug Mode", value=False, scale=0, min_width=120,
+                    label="🔧 Debug Mode",
+                    value=False,
+                    scale=0,
+                    min_width=120,
                 )
 
             with gr.Row():
@@ -550,7 +552,9 @@ Your options:
                     visible=False,
                 )
             with gr.Column(scale=1):
-                modify_profile_btn = gr.Button("✏️ Modify Profile", min_width=120, elem_classes=["my-special-btn"])
+                modify_profile_btn = gr.Button(
+                    "✏️ Modify Profile", min_width=120, elem_classes=["my-special-btn"]
+                )
         with gr.Row(elem_id="profile-section"):
             current_profile = gr.Textbox(
                 label="",
@@ -575,9 +579,13 @@ Your options:
                         visible=False,
                     )
                 with gr.Column(scale=1):
-                    policy_skip_btn = gr.Button("⏭️ Skip Policy", min_width=120, elem_classes=["my-special-btn"])
+                    policy_skip_btn = gr.Button(
+                        "⏭️ Skip Policy", min_width=120, elem_classes=["my-special-btn"]
+                    )
                     policy_big_skip_btn = gr.Button(
-                        "⏭️ Skip All Policies", min_width=140, elem_classes=["my-special-btn"]
+                        "⏭️ Skip All Policies",
+                        min_width=140,
+                        elem_classes=["my-special-btn"],
                     )
             with gr.Row():
                 # Left column: Current Policies
@@ -661,7 +669,9 @@ You can obtain more information about each trial's details and possible relevanc
             )
 
             with gr.Row():
-                refresh_trials_btn = gr.Button("Refresh", elem_classes=["my-special-btn"])
+                refresh_trials_btn = gr.Button(
+                    "Refresh", elem_classes=["my-special-btn"]
+                )
             trials_bx = gr.Dataframe(
                 label="Retrieved relevant trials based on patient's profile",
                 wrap=True,
@@ -691,7 +701,9 @@ You can obtain more information about each trial's details and possible relevanc
                 visible=True,
             )
             with gr.Row():
-                refresh_scores_btn = gr.Button("Refresh", elem_classes=["my-special-btn"])
+                refresh_scores_btn = gr.Button(
+                    "Refresh", elem_classes=["my-special-btn"]
+                )
             trials_scores_bx = gr.Dataframe(
                 label="Trials Scores based on patient's profile",
                 wrap=True,

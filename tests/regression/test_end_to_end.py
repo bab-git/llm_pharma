@@ -19,7 +19,6 @@ def test_end_to_end_workflow():
     try:
         # Import all necessary components
         # from backend.my_agent.llm_manager import LLMManager
-        from backend.my_agent.State import create_agent_state
         from backend.my_agent.patient_collector import (
             patient_collector_node,
         )
@@ -27,6 +26,7 @@ def test_end_to_end_workflow():
             policy_evaluator_node,
             policy_search_node,
         )
+        from backend.my_agent.State import create_agent_state
         from backend.my_agent.trial_service import grade_trials_node, trial_search_node
 
         # from backend.my_agent.workflow_manager import WorkflowManager

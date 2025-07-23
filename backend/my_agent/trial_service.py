@@ -23,7 +23,7 @@ def safe_invoke(retriever, question, retries=2):
     for i in range(retries):
         try:
             return retriever.invoke(question)
-        except ValueError as e:
+        except ValueError:
             print(f"⚠️ JSON parse failed (attempt {i+1}), retrying…")
     raise RuntimeError("Failed to parse JSON after retries")
 
@@ -36,7 +36,7 @@ class grade(BaseModel):
     explanation: str = Field(description="Reasons to the given relevance score.")
     further_information: Optional[str] = Field(
         default="Not applicable",
-        description="Additional information needed from patient's medical history"
+        description="Additional information needed from patient's medical history",
     )
 
     # class Config:

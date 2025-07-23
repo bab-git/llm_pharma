@@ -60,8 +60,9 @@ from pydantic import BaseModel, Field
 
 # Import required components
 from backend.my_agent.database_manager import DatabaseManager
-from backend.my_agent.patient_collector import AgentState, PatientCollectorConfig
-from .State import AgentState, create_agent_state
+from backend.my_agent.patient_collector import PatientCollectorConfig
+
+from .State import AgentState
 
 _ = load_dotenv(find_dotenv())  # read local .env file
 

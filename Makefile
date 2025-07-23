@@ -95,7 +95,7 @@ test-regression:
 # =====================
 # Combined Checks
 # =====================
-check: lint format type-check test
+verify: lint format type-check test
 	@echo "All checks completed!"
 
 # =====================

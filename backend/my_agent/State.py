@@ -1,4 +1,5 @@
-from typing import TypedDict, List
+from typing import List, TypedDict
+
 
 class AgentState(TypedDict):
     """State definition for the LLM Pharma workflow agent."""
@@ -23,7 +24,7 @@ class AgentState(TypedDict):
     ask_expert: str
     trial_found: bool
     error_message: str
-    selected_model: str 
+    selected_model: str
 
 
 def create_agent_state() -> AgentState:
@@ -55,4 +56,4 @@ def create_agent_state() -> AgentState:
         "trial_found": False,
         "error_message": "",
         "selected_model": "llama-3.3-70b-versatile",
-    } 
+    }
