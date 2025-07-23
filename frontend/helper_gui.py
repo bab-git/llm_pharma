@@ -14,8 +14,8 @@ class trials_gui:
     # Data-driven mappings
     NODE_NOTIFICATIONS = {
         "patient_collector": "Check Patient Profile - Patient profile has been created",
-        "policy_search": "Check Policy Conflict - Relevant Clinical Policies have been retrieved",
-        "policy_evaluator": "Check Policy Conflict - In case of policy conflict, your action is needed",
+        "policy_search": "Check Clinical Policy Conflict - Relevant Clinical Policies have been retrieved",
+        "policy_evaluator": "Check Clinical Policy Conflict - In case of clinical policy conflict, your action is needed",
         "trial_search": "Check Potential Trials - Potentially relevant clinical trials have been found",
         "grade_trials": "Check Trials Scores - Calculated Trial Relevance scores are ready",
         "profile_rewriter": "Go to Profile Tab - Patient profile has been updated",
@@ -68,9 +68,9 @@ class trials_gui:
         """Get placeholder text for different components"""
         placeholders = {
             "patient_profile": "Patient profile will appear here after evaluation starts...",
-            "policies": "Current policies will appear here after policy search...",
-            "trials": "Potential trials will appear here after policy evaluation...",
-            "policy_status": "Policy issues will appear here when conflicts are detected...",
+            "policies": "Current clinical policies will appear here after policy search...",
+            "trials": "Potential trials will appear here after clinical policy evaluation...",
+            "policy_status": "Clinical policy issues will appear here when conflicts are detected...",
             "stages_history": "Stages execution history will appear here as the agent runs...",
         }
         return placeholders.get(key, "No data available")
@@ -107,9 +107,9 @@ class trials_gui:
         if trial_found is True:
             return "🎉 Trial Scores - Perfectly Matched clinical trials have been found! 🎉"
         elif last_node == "grade_trials":
-            return """⚠️ Trials Scores - No matched trials found. Please review the relevance scores for more details.
+            return """⚠️ Trials Scores - No matched trials found. Please review the TRIAL SCORES (bottom tab) for more details.
 Your options:            
-   A - Continue with auto-generated profile rewriter --> Continue Evaluation,
+   A - Continue and let the AI rewrite the patient profile to better match trials,
    B - Manually modify the patient profile to better match trials."""
         elif last_node == "trial_search" and trials == []:
             if nnode is None:
@@ -143,7 +143,7 @@ Your options:
 
         if not state_values or "policies" not in state_values:
             return gr.update(
-                label="📜 Policies Related to the Patient",
+                label="📜 Clinical Policies Related to the Patient",
                 value=self.placeholder_for("policies"),
             )
 
@@ -166,10 +166,10 @@ Your options:
 
         if not state_values or "last_node" not in state_values:
             return gr.update(
-                label="Policy Status", value="No policy evaluation started yet"
+                label="Clinical Policy Status", value="No clinical policy evaluation started yet"
             )
 
-        policy_status = "No policy checked yet"
+        policy_status = "No clinical policy checked yet"
 
         if "checked_policy" in state_values and state_values["checked_policy"]:
             checked_policy = state_values["checked_policy"]
@@ -179,18 +179,18 @@ Your options:
             # Get policy title/header
             policy_content = checked_policy.page_content
             policy_header = (
-                policy_content.split("\n")[0] if policy_content else "Policy"
+                policy_content.split("\n")[0] if policy_content else "Clinical Policy"
             )
 
             if policy_eligible is True:
                 status_icon = "✅"
                 status_text = "PASSED"
-                policy_status = f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
+                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
             elif policy_eligible is False:
                 status_icon = "❌"
                 status_text = "FAILED"
                 policy_status = (
-                    f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
+                    f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
                 )
 
                 if rejection_reason:
@@ -199,7 +199,7 @@ Your options:
                 status_icon = "❓"
                 status_text = "UNKNOWN"
                 policy_status = (
-                    f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
+                    f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
                 )
 
         return gr.update(value=policy_status)
@@ -262,8 +262,8 @@ Your options:
             return pd.DataFrame(
                 {
                     "nctid": ["No trials found yet"],
-                    "diseases": ["Complete policy evaluation first"],
-                    "relevance": ["Trials will be searched after policy check"],
+                    "diseases": ["Complete clinical policy evaluation first"],
+                    "relevance": ["Trials will be searched after clinical policy check"],
                 }
             )
 
@@ -384,8 +384,8 @@ Your options:
                 df = pd.DataFrame(
                     {
                         "index": ["No trials retrieved yet"],
-                        "nctid": ["Complete policy evaluation first"],
-                        "diseases": ["Trials will be searched after policy check"],
+                        "nctid": ["Complete clinical policy evaluation first"],
+                        "diseases": ["Trials will be searched after clinical policy check"],
                         "Criteria": ["Continue evaluation in the Agent tab"],
                     }
                 )
@@ -420,7 +420,7 @@ Your options:
                         value="""## Process Overview:
 
 - 🔍 **Profile Creation:** Generate a patient profile
-- ⚠️ **Policy Check:** Identify and resolve conflicting clinical policies
+- ⚠️ **Clinical Policy Check:** Identify and resolve conflicting clinical policies
 - 🔄 **Trial Matching:** Find potential clinical trial matches
 - 🎯 **Trial Relevance:** Determine relevant trials for the patient
 <br><br>
@@ -568,22 +568,22 @@ Your options:
             with gr.Row():
                 with gr.Column(scale=3):
                     policy_title = gr.Markdown(
-                        value="## ⚠️ Policy Conflict Resolution", visible=True
+                        value="## ⚠️ Clinical Policy Conflict Resolution", visible=True
                     )
                     policy_conflict_info = gr.Markdown(
-                        value="""**🚨 Policy Conflict Detected**
+                        value="""**🚨 Clinical Policy Conflict Detected**
 
-- **⏭️ Skip if this policy is not relevant**
+- **⏭️ Skip if this clinical policy is not relevant**
 - **🔧 Modify patient profile if needed**
-- **⏭️⏭️ Skip all policy checks for the patient**""",
+- **⏭️⏭️ Skip all clinical policy checks for the patient**""",
                         visible=False,
                     )
                 with gr.Column(scale=1):
                     policy_skip_btn = gr.Button(
-                        "⏭️ Skip Policy", min_width=120, elem_classes=["my-special-btn"]
+                        "⏭️ Skip Clinical Policy", min_width=120, elem_classes=["my-special-btn"]
                     )
                     policy_big_skip_btn = gr.Button(
-                        "⏭️ Skip All Policies",
+                        "⏭️ Skip All Clinical Policies",
                         min_width=140,
                         elem_classes=["my-special-btn"],
                     )
@@ -591,7 +591,7 @@ Your options:
                 # Left column: Current Policies
                 with gr.Column(scale=1):
                     current_policies = gr.Textbox(
-                        label="📜 Policies Related to the Patient",
+                        label="📜 Clinical Policies Related to the Patient",
                         lines=15,
                         interactive=False,
                         placeholder=self.placeholder_for("policies"),
@@ -599,7 +599,7 @@ Your options:
                 # Right column: Policy Issues
                 with gr.Column(scale=1):
                     policy_status = gr.Textbox(
-                        label="⚠️ Policy Issues & Conflicts",
+                        label="⚠️ Clinical Policy Issues & Conflicts",
                         lines=4,
                         interactive=False,
                         placeholder=self.placeholder_for("policy_status"),
@@ -652,7 +652,7 @@ You can obtain more information about each trial's details and possible relevanc
             gr.Markdown(
                 value="""## 🎯 Matched Clinical Trials
 
-**📊 View trials** that match the patient's profile after policy evaluation.
+**📊 View trials** that match the patient's profile after clinical policy evaluation.
 
 **What you'll see:**
 - **📋 Trial details** including study descriptions and requirements
@@ -664,7 +664,7 @@ You can obtain more information about each trial's details and possible relevanc
 
 **If no trials appear:**
 - Check **'Profile'** tab to adjust patient information
-- Review **'Policies'** tab for restrictive policies""",
+- Review **'Clinical Policies'** tab for restrictive clinical policies""",
                 visible=True,
             )
 
@@ -753,16 +753,16 @@ You can obtain more information about each trial's details and possible relevanc
         """Skip the current policy and show confirmation message"""
         self.modify_state("policy_skip", self.SENTINEL_NONE, "")
         return gr.update(
-            label="Policy Skipped",
-            value="The current policy is skipped for this patient.\n\nPlease continue evaluation of remaining policies in the Agent tab.",
+            label="Clinical Policy Skipped",
+            value="The current clinical policy is skipped for this patient.\n\nPlease continue evaluation of remaining clinical policies in the Agent tab.",
         )
 
     def big_skip_policy_and_notify(self):
         """Skip the whole policy check and show confirmation message"""
         self.modify_state("policy_big_skip", self.SENTINEL_NONE, "")
         return gr.update(
-            label="Policy Skipped",
-            value="✅ The 'policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches.\n\n ===> [Continue Evaluation].",
+            label="Clinical Policy Skipped",
+            value="✅ The 'clinical policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches.\n\n ===> [Continue Evaluation].",
         )
 
     def refresh_all_status(self, skip_policy_status_update=False):
