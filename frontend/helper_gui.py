@@ -436,14 +436,14 @@ Your options:
                 with gr.Column(scale=2):
                     prompt_bx = gr.Textbox(
                         label="Prompt about patient",
-                        value="Is patient_ID 56 eligible for any medical trial?",
+                        value="Is patient_ID 41 eligible for any medical trial?",
                         lines=3,
                     )
                 with gr.Column(scale=1):
                     patient_id_dropdown = gr.Dropdown(
                         choices=[f"Patient {i}" for i in range(1, 100)],
                         label="Select Patient ID",
-                        value="Patient 56",
+                        value="Patient 41",
                         interactive=True,
                     )
                 tab_notification = gr.Textbox(
@@ -722,7 +722,7 @@ You can obtain more information about each trial's details and possible relevanc
         if patient_selection and patient_selection.startswith("Patient "):
             patient_id = patient_selection.split(" ")[1]
             return f"Is patient_ID {patient_id} eligible for any medical trial?"
-        return "Is patient_ID 56 eligible for any medical trial?"
+        return "Is patient_ID 41 eligible for any medical trial?"
 
     def toggle_debug_fields(self, debug_enabled):
         """Toggle visibility of debug fields"""

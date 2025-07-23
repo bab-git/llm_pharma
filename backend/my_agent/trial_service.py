@@ -55,7 +55,9 @@ class GradeHallucinations(BaseModel):
     binary_score: str = Field(
         description="Answer is grounded in the patient's medical profile, 'yes' or 'no'"
     )
-    Reason: str = Field(description="Reasons to the given relevance score.")
+    reason: str = Field(
+        description="Reasons to the given relevance score."
+    )
 
 
 # --- Helper to get default LLMManagers ---
@@ -251,6 +253,22 @@ def grade_trials_node(state: AgentState) -> dict:
 
                 def run_hallucination():
                     current_model = llm_manager_tool.current
+                    prompt_hallucination = PromptTemplate(
+                        template="""
+                        You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
+                        Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile.
+                        ===============
+                        Here is the patient's medical profile: {patient_profile} \n\n
+                        ===============
+                        Here is the LLM generated answer: {explanation} \n\n
+                                                
+                        Respond with:
+                        - binary_score: "yes" or "no"
+                        - reason: Your reasoning
+                        """,
+                        input_variables=["patient_profile", "explanation"],
+                    )
+                    
                     system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
                          Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
                     hallucination_prompt = ChatPromptTemplate.from_messages(
@@ -258,19 +276,24 @@ def grade_trials_node(state: AgentState) -> dict:
                             ("system", system),
                             (
                                 "human",
-                                "Patient's medical profile: \n\n {patient_profile} \n\n LLM generation: {explanation}",
+                                "Patient's medical profile: \n\n {patient_profile} \n\n LLM generated answer: {explanation}",
                             ),
                         ]
                     )
+
                     llm_with_tool_hallucination = current_model.with_structured_output(
                         GradeHallucinations
                     )
-                    hallucination_grader = (
-                        hallucination_prompt | llm_with_tool_hallucination
+                    # hallucination_grader = hallucination_prompt | llm_with_tool_hallucination
+                    hallucination_grader = prompt_hallucination | llm_with_tool_hallucination
+                    
+                    result = hallucination_grader.invoke(
+                        {
+                            "patient_profile": patient_profile,
+                            "explanation": explanation,
+                        }
                     )
-                    return hallucination_grader.invoke(
-                        {"patient_profile": patient_profile, "explanation": explanation}
-                    )
+                    return result
 
                 factual_score = llm_manager_tool.invoke_with_fallback(
                     run_hallucination, reset=False
