@@ -47,17 +47,10 @@ def create_workflow_manager(demo: bool, configs=None):
 
     # import os
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    from backend.my_agent.llm_manager import LLMManager
     from backend.my_agent.workflow_manager import WorkflowManager
 
-    # Use passed configs
-    llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-    llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-
     # Create and return workflow manager
-    workflow_manager = WorkflowManager(
-        llm_manager=llm_manager, llm_manager_tool=llm_manager_tool, configs=configs
-    )
+    workflow_manager = WorkflowManager(configs=configs)
     return workflow_manager
 
 
