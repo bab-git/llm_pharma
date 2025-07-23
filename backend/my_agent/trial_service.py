@@ -231,15 +231,11 @@ def grade_trials_node(state: AgentState) -> dict:
                         and "relevance" in text_response.lower()
                     ):
                         relevance = "Yes"
-                    return type(
-                        "Grade",
-                        (),
-                        {
-                            "relevance_score": relevance,
-                            "explanation": text_response[:500],
-                            "further_information": "Additional patient history review needed",
-                        },
-                    )()
+                    return grade(
+                        relevance_score=relevance,
+                        explanation=text_response[:500],
+                        further_information="Additional patient history review needed",
+                    )
 
             trial_score = llm_manager_tool.invoke_with_fallback(
                 run_trial_score, reset=False

@@ -438,7 +438,7 @@ Available tools: {tool_names}
                 "last_node": "policy_evaluator",
                 "policy_eligible": policy_eligible.lower() == "yes",
                 "rejection_reason": rejection_reason,
-                "revision_number": state.get("revision_number", 0) + 1,
+                # "revision_number": state.get("revision_number", 0) + 1,
                 "checked_policy": policy_doc,
                 "policy_qs": policy_qs,
                 "unchecked_policies": unchecked_policies,
