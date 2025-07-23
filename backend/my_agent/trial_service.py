@@ -34,18 +34,19 @@ class grade(BaseModel):
 
     relevance_score: str = Field(description="Relevance score: 'Yes' or 'No'")
     explanation: str = Field(description="Reasons to the given relevance score.")
-    further_information: str = Field(
+    further_information: Optional[str] = Field(
+        default="Not applicable",
         description="Additional information needed from patient's medical history"
     )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "relevance_score": "Yes",
-                "explanation": "The patient has the target disease condition for this trial.",
-                "further_information": "Need to verify patient's current treatment status.",
-            }
-        }
+    # class Config:
+    #     json_schema_extra = {
+    #         "example": {
+    #             "relevance_score": "Yes",
+    #             "explanation": "The patient has the target disease condition for this trial.",
+    #             "further_information": "Need to verify patient's current treatment status.",
+    #         }
+    #     }
 
 
 class GradeHallucinations(BaseModel):
@@ -207,13 +208,15 @@ def grade_trials_node(state: AgentState) -> dict:
                 try:
                     llm_with_tool = current_model.with_structured_output(grade)
                     retrieval_grader = prompt_grader | llm_with_tool
-                    return retrieval_grader.invoke(
+                    result = retrieval_grader.invoke(
                         {
                             "patient_profile": patient_profile,
                             "document": doc_txt,
                             "trial_diseases": trial_diseases,
                         }
                     )
+                    # print(f"Grade result: {result}")
+                    return result
                 except Exception as e:
                     print(f"Structured output failed, using fallback: {e}")
                     text_response = (

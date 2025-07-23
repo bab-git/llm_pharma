@@ -115,6 +115,9 @@ Your options:
                 return "Agent Tab - The pipeline couldn't find any potential/relevant trials. Try another patient."
         elif last_node == "profile_rewriter":
             return "Go to Profile Tab - The patient profile has been rewritten by the agent to increase the chances of finding relevant trials. You can also manually modify the patient profile."
+        elif last_node == "policy_evaluator":
+            if nnode == 'trial_search':
+                return "Continue Evaluation to see the trial search results."
 
         return self.NODE_NOTIFICATIONS.get(last_node, f"Agent is at: {last_node}")
 
@@ -182,7 +185,7 @@ Your options:
                 status_icon = "✅"
                 status_text = "PASSED"
                 policy_status = (
-                    f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
+                    f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
                 )
             elif policy_eligible is False:
                 status_icon = "❌"
@@ -421,6 +424,8 @@ Your options:
 - ⚠️ **Policy Check:** Identify and resolve conflicting clinical policies
 - 🔄 **Trial Matching:** Find potential clinical trial matches
 - 🎯 **Trial Relevance:** Determine relevant trials for the patient
+<br><br>
+- 🚨⌛ **Note:** Processing may be slow due to free-tier model usage.
 """,
                         visible=True,
                     )
@@ -743,7 +748,7 @@ You can obtain more information about each trial's details and possible relevanc
         self.modify_state("policy_big_skip", self.SENTINEL_NONE, "")
         return gr.update(
             label="Policy Skipped",
-            value="✅ The 'policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches, via the Agent tab.",
+            value="✅ The 'policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches.\n\n ===> [Continue Evaluation].",
         )
 
     def refresh_all_status(self, skip_policy_status_update=False):

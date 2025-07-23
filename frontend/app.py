@@ -5,6 +5,7 @@ Simplified LLM Pharma Frontend App
 
 import argparse
 import sys
+import os
 from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
@@ -43,8 +44,7 @@ def create_workflow_manager(demo: bool, configs=None):
         # Demo returns a compiled graph directly, not a WorkflowManager
         return create_demo_graph()
 
-    # Import here to avoid circular imports
-    import os
+    # import os
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
     from backend.my_agent.llm_manager import LLMManager
     from backend.my_agent.workflow_manager import WorkflowManager
@@ -63,6 +63,9 @@ def create_workflow_manager(demo: bool, configs=None):
 def main():
     # Load environment and parse CLI
     load_dotenv(find_dotenv())
+    print(f"OpenAI API Key: {os.environ.get('OPENAI_API_KEY', 'Not found')}")
+    print(f"Groq API Key: {os.environ.get('GROQ_API_KEY', 'Not found')[-20:]}")
+
     parser = argparse.ArgumentParser(description="LLM Pharma Frontend")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=7958)
@@ -71,7 +74,7 @@ def main():
     args = parser.parse_args()
 
     # Load configs at the top
-    import os
+    # import os
     from omegaconf import OmegaConf
     configs_path = os.path.join(os.path.dirname(__file__), "..", "config", "config.yaml")
     configs = OmegaConf.load(configs_path)
