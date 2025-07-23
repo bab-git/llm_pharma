@@ -425,7 +425,10 @@ Your options:
 - 🔄 **Trial Matching:** Find potential clinical trial matches
 - 🎯 **Trial Relevance:** Determine relevant trials for the patient
 <br><br>
-- 🚨⌛ **Note:** Processing may be slow due to free-tier model usage.
+🚨⚠️ **Notes:** 
+- The demo uses general-purpose LLMs not specialized in medical domain. 
+- This demo is intended only for agentic workflow capabilities showcase.
+- Processing may be slow due to free-tier model usage.
 """,
                         visible=True,
                     )
@@ -542,8 +545,7 @@ Your options:
                 )
                 profile_help = gr.Markdown(
                     value="""**✏️ You can directly change the text and press the 'Modify' button**, especially in cases of:
-- ⚠️ **Conflicts with trial policies**
-- 🔍 **When relevant trials cannot be found**
+- ⚠️ **Conflicts between patient profile and trial policies**
 - 📝 **Helping patient to match specific trial**""",
                     visible=False,
                 )
@@ -637,7 +639,7 @@ You can obtain more information about each trial's details and possible relevanc
         """Build Potential Trials and Trials Scores tabs"""
         tabs_components = {}
 
-        with gr.Tab("Potential Trials"):
+        with gr.Tab("POTENTIAL TRIALS"):
             # Add informative text at the top of the Matched Trials tab
             gr.Markdown(
                 value="""## 🎯 Matched Clinical Trials
@@ -669,7 +671,7 @@ You can obtain more information about each trial's details and possible relevanc
             tabs_components["refresh_trials_btn"] = refresh_trials_btn
             tabs_components["trials_bx"] = trials_bx
 
-        with gr.Tab("Trials Scores"):
+        with gr.Tab("TRIAL SCORES"):
             # Add informative text at the top of the Trials Scores tab
             gr.Markdown(
                 value="""## 📊 Trial Eligibility Scores
