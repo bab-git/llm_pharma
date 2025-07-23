@@ -1,8 +1,11 @@
 import os
-
+from pathlib import Path
 import gradio as gr
 import pandas as pd
 
+
+root_path = Path(__file__).parent
+image_path = root_path / "static" / "image_source.jpg"
 
 class trials_gui:
     SENTINEL_NONE = "__NONE__"
@@ -1093,6 +1096,14 @@ You can obtain more information about each trial's details and possible relevanc
             }
             """,
         ) as demo:
+
+            # Add image at the very top
+            gr.Image(
+                value=str(image_path),
+                show_label=False,
+                show_download_button=False,
+                elem_id="dashboard-header-image",
+            )
 
             # Add app description at the very top
             # app_description = gr.Markdown(value=self.APP_DESCRIPTION, visible=True)
