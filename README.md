@@ -31,6 +31,8 @@ LLM Pharma is an intelligent clinical trial management system that automates the
 
 The LLM Pharma system follows a structured process flow to evaluate patient eligibility for clinical trials:
 
+![Pipeline Block Diagram](images/diagram.png)
+
 1. **Data Collection and Preprocessing**: Import and prepare patient data for analysis
 2. **Patient Profile Analysis**: Utilize LLMs to analyze patient data and extract relevant information
 3. **Eligibility Verification**: Assess patient data against clinical trial policies to determine eligibility
@@ -142,6 +144,8 @@ python frontend/app.py --host 0.0.0.0 --port 8080 --share
 ## 🏗️ Architecture
 
 The system is built using a modular architecture with the following key components:
+
+![Agent Pipeline Graph View](notebooks/graph.png)
 
 ### Backend Modules (`backend/my_agent/`)
 - **WorkflowManager**: Orchestrates the LangGraph-based evaluation workflow
