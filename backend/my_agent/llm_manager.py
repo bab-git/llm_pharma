@@ -45,11 +45,11 @@ class LLMManager:
             # ("llama3-8b-8192", "groq"),
         ]
         tool_model_list = [
-            ("llama-3.3-70b-versatile", "groq"),  # Slow
+            ("moonshotai/kimi-k2-instruct", "groq"), # fast
+            ("qwen/qwen3-32b", "groq"),  # fast            
+            ("llama-3.3-70b-versatile", "groq"),  # Slow            
             ("llama3-70b-8192", "groq"),  # Slow
             ("deepseek-r1-distill-llama-70b", "groq"),  # Slow
-            ("moonshotai/kimi-k2-instruct", "groq"),
-            ("qwen/qwen3-32b", "groq"),  # fast
             # ("gemma2-9b-it", "groq"), # tool fails
             # ("llama-3.1-8b-instant", "groq"), # tool fails
             # ("llama3-8b-8192", "groq"), # tool fails
