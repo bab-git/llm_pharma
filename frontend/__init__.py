@@ -10,7 +10,7 @@ clinical trial management system.
 
 __all__ = [
     "trials_gui",
-    # "create_workflow_manager", 
+    # "create_workflow_manager",
 ]
 
 __version__ = "1.0.0"

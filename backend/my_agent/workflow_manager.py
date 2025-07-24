@@ -207,6 +207,7 @@ class WorkflowManager:
             # Run the workflow with session-specific thread_id
             if thread_id is None:
                 import uuid
+
                 thread_id = str(uuid.uuid4())
             result = self.app.invoke(
                 state, config={"configurable": {"thread_id": thread_id}}
@@ -286,22 +287,22 @@ class WorkflowManager:
     def cleanup_session_state(self, session_id: str) -> Dict[str, Any]:
         """
         Clean up all workflow states for a specific session.
-        
+
         Args:
             session_id: The session ID to clean up (will clean up all threads starting with this ID)
-            
+
         Returns:
             Dict containing the cleanup result
         """
         try:
             # Get all thread states
             cleaned_count = 0
-            all_threads = []
-            
+            # all_threads = []
+
             # Note: SqliteSaver doesn't provide a direct way to list all threads
             # This is a limitation we'll need to work around by tracking threads in the frontend
             # For now, we can only clear specific thread IDs if provided
-            
+
             return {
                 "success": True,
                 "message": f"Session cleanup requested for {session_id}",

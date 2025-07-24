@@ -10,7 +10,7 @@ from typing import Optional
 from langchain.chains.query_constructor.base import AttributeInfo
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from omegaconf import DictConfig
 from pydantic import BaseModel, Field
 
@@ -55,9 +55,7 @@ class GradeHallucinations(BaseModel):
     binary_score: str = Field(
         description="Answer is grounded in the patient's medical profile, 'yes' or 'no'"
     )
-    reason: str = Field(
-        description="Reasons to the given relevance score."
-    )
+    reason: str = Field(description="Reasons to the given relevance score.")
 
 
 # --- Helper to get default LLMManagers ---
@@ -268,25 +266,27 @@ def grade_trials_node(state: AgentState) -> dict:
                         """,
                         input_variables=["patient_profile", "explanation"],
                     )
-                    
-                    system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
-                         Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
-                    hallucination_prompt = ChatPromptTemplate.from_messages(
-                        [
-                            ("system", system),
-                            (
-                                "human",
-                                "Patient's medical profile: \n\n {patient_profile} \n\n LLM generated answer: {explanation}",
-                            ),
-                        ]
-                    )
+
+                    # system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
+                    #      Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
+                    # hallucination_prompt = ChatPromptTemplate.from_messages(
+                    #     [
+                    #         ("system", system),
+                    #         (
+                    #             "human",
+                    #             "Patient's medical profile: \n\n {patient_profile} \n\n LLM generated answer: {explanation}",
+                    #         ),
+                    #     ]
+                    # )
 
                     llm_with_tool_hallucination = current_model.with_structured_output(
                         GradeHallucinations
                     )
                     # hallucination_grader = hallucination_prompt | llm_with_tool_hallucination
-                    hallucination_grader = prompt_hallucination | llm_with_tool_hallucination
-                    
+                    hallucination_grader = (
+                        prompt_hallucination | llm_with_tool_hallucination
+                    )
+
                     result = hallucination_grader.invoke(
                         {
                             "patient_profile": patient_profile,

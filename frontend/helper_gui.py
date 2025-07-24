@@ -60,14 +60,14 @@ This AI-powered application helps healthcare professionals quickly evaluate pati
         self.partial_message = ""
         self.response = {}
         self.max_iterations = 10
-        
+
         # Session-based state management
         self.session_id = str(uuid.uuid4())  # Generate unique session ID
         self.iterations = {}  # Store iterations per session
         self.threads = {}  # Store active threads per session
         self.thread_counter = 0  # Internal counter for this session
         self.thread = {"configurable": {"thread_id": self.session_id}}
-        
+
         self.demo = self.create_interface()
 
     def get_current_session_thread_id(self):
@@ -93,22 +93,24 @@ This AI-powered application helps healthcare professionals quickly evaluate pati
         try:
             # Clean up threads for this session
             session_threads = self.get_session_threads()
-            
-            if self.workflow_manager and hasattr(self.workflow_manager, 'cleanup_session_state'):
+
+            if self.workflow_manager and hasattr(
+                self.workflow_manager, "cleanup_session_state"
+            ):
                 # Use WorkflowManager's cleanup if available
                 result = self.workflow_manager.cleanup_session_state(self.session_id)
                 print(f"Session cleanup result: {result}")
-            
+
             # Clean up local session state
             if self.session_id in self.threads:
                 del self.threads[self.session_id]
             if self.session_id in self.iterations:
                 del self.iterations[self.session_id]
-                
+
             return {
                 "success": True,
                 "message": f"Cleaned up session {self.session_id[:8]}",
-                "threads_cleaned": len(session_threads)
+                "threads_cleaned": len(session_threads),
             }
         except Exception as e:
             print(f"Error during session cleanup: {e}")
@@ -118,7 +120,7 @@ This AI-powered application helps healthcare professionals quickly evaluate pati
         """Cleanup when the object is destroyed"""
         try:
             self.cleanup_session()
-        except:
+        except Exception:
             pass  # Ignore errors during cleanup
 
     def toggle_debug_fields(self, debug_mode):
@@ -251,7 +253,8 @@ Your options:
 
         if not state_values or "last_node" not in state_values:
             return gr.update(
-                label="Clinical Policy Status", value="No clinical policy evaluation started yet"
+                label="Clinical Policy Status",
+                value="No clinical policy evaluation started yet",
             )
 
         policy_status = "No clinical policy checked yet"
@@ -274,18 +277,14 @@ Your options:
             elif policy_eligible is False:
                 status_icon = "❌"
                 status_text = "FAILED"
-                policy_status = (
-                    f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
-                )
+                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
 
                 if rejection_reason:
                     policy_status += f"\n\n🚨 **Rejection Reason:**\n{rejection_reason}"
             else:
                 status_icon = "❓"
                 status_text = "UNKNOWN"
-                policy_status = (
-                    f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
-                )
+                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
 
         return gr.update(value=policy_status)
 
@@ -348,7 +347,9 @@ Your options:
                 {
                     "nctid": ["No trials found yet"],
                     "diseases": ["Complete clinical policy evaluation first"],
-                    "relevance": ["Trials will be searched after clinical policy check"],
+                    "relevance": [
+                        "Trials will be searched after clinical policy check"
+                    ],
                 }
             )
 
@@ -364,7 +365,7 @@ Your options:
 
                 last_node = state.values.get("last_node", "unknown")
                 revision_number = state.values.get("revision_number", 0)
-                
+
                 # Use session ID instead of unknown timestamp
                 session_short = self.session_id[:8]
 
@@ -384,7 +385,9 @@ Your options:
 
             stages_text = "\n".join(stages_list)
             last_node, nnode, thread_id, rev, astep = self.get_disp_state()
-            new_label = f"Stages History (Session: {self.session_id[:8]}, Current: {last_node})"
+            new_label = (
+                f"Stages History (Session: {self.session_id[:8]}, Current: {last_node})"
+            )
 
             return gr.update(label=new_label, value=stages_text)
 
@@ -472,7 +475,9 @@ Your options:
                     {
                         "index": ["No trials retrieved yet"],
                         "nctid": ["Complete clinical policy evaluation first"],
-                        "diseases": ["Trials will be searched after clinical policy check"],
+                        "diseases": [
+                            "Trials will be searched after clinical policy check"
+                        ],
                         "Criteria": ["Continue evaluation in the Agent tab"],
                     }
                 )
@@ -485,7 +490,7 @@ Your options:
     def build_agent_tab(self):
         """Build the main agent control tab"""
         with gr.Tab("Agent"):
- 
+
             with gr.Row():
                 with gr.Column(scale=2):
                     prompt_bx = gr.Textbox(
@@ -564,7 +569,7 @@ Your options:
                     current_thread_id = self.get_current_session_thread_id()
                     if current_thread_id not in initial_threads:
                         initial_threads.append(current_thread_id)
-                    
+
                     thread_pd = gr.Dropdown(
                         choices=initial_threads,
                         value=current_thread_id if initial_threads else None,
@@ -650,7 +655,9 @@ Your options:
                     )
                 with gr.Column(scale=1):
                     policy_skip_btn = gr.Button(
-                        "⏭️ Skip Clinical Policy", min_width=120, elem_classes=["my-special-btn"]
+                        "⏭️ Skip Clinical Policy",
+                        min_width=120,
+                        elem_classes=["my-special-btn"],
                     )
                     policy_big_skip_btn = gr.Button(
                         "⏭️ Skip All Clinical Policies",
@@ -903,11 +910,11 @@ You can obtain more information about each trial's details and possible relevanc
         if not current_state.metadata:
             session_threads = self.get_session_threads()
             current_thread_id = self.get_current_session_thread_id()
-            
+
             # Ensure the current thread ID is in the choices list
             if current_thread_id not in session_threads and session_threads:
                 session_threads.append(current_thread_id)
-            
+
             return (
                 "",  # prompt_bx
                 gr.update(
@@ -919,7 +926,10 @@ You can obtain more information about each trial's details and possible relevanc
                 current_thread_id,  # threadid_bx
                 "",  # count_bx
                 gr.update(choices=["N/A"], value="N/A"),  # step_pd
-                gr.update(choices=session_threads, value=current_thread_id if session_threads else None),  # thread_pd
+                gr.update(
+                    choices=session_threads,
+                    value=current_thread_id if session_threads else None,
+                ),  # thread_pd
                 "",  # search_bx
             )
 
@@ -954,11 +964,11 @@ You can obtain more information about each trial's details and possible relevanc
         # 8) thread_pd update
         session_threads = self.get_session_threads()
         current_thread_id = self.get_current_session_thread_id()
-        
+
         # Ensure the current thread ID is in the choices list
         if current_thread_id not in session_threads:
             session_threads.append(current_thread_id)
-        
+
         thread_upd = gr.update(choices=session_threads, value=current_thread_id)
         # 9) search_bx
         search_cnt = vals.get("trial_searches", "")
@@ -981,7 +991,9 @@ You can obtain more information about each trial's details and possible relevanc
     def run_agent(self, start, patient_prompt, stop_after):
         """Main agent execution function"""
         if start:
-            self.iterations[self.session_id] = 0 # Initialize iterations for the session
+            self.iterations[self.session_id] = (
+                0  # Initialize iterations for the session
+            )
             # Get the current selected model from the state
             current_values = self.graph.get_state(self.thread)
             selected_model = (
@@ -999,8 +1011,10 @@ You can obtain more information about each trial's details and possible relevanc
                 "last_node": "",
                 "selected_model": selected_model,
             }
-            self.thread_counter += 1 # Increment thread counter for this session
-            self.thread = {"configurable": {"thread_id": self.get_current_session_thread_id()}}
+            self.thread_counter += 1  # Increment thread counter for this session
+            self.thread = {
+                "configurable": {"thread_id": self.get_current_session_thread_id()}
+            }
         else:
             config = None
         while self.iterations[self.session_id] < self.max_iterations:
@@ -1105,7 +1119,7 @@ You can obtain more information about each trial's details and possible relevanc
             self.thread = {"configurable": {"thread_id": str(new_thread_id)}}
             # Update the thread counter to match the selected thread
             try:
-                self.thread_counter = int(new_thread_id.split('_')[-1])
+                self.thread_counter = int(new_thread_id.split("_")[-1])
             except (ValueError, IndexError):
                 pass  # Keep current counter if parsing fails
         return
@@ -1203,17 +1217,17 @@ You can obtain more information about each trial's details and possible relevanc
             )
 
             # Add app description at the very top - title and description in single column
-            app_description_header = gr.Markdown(
+            gr.Markdown(
                 value="""## 🏥 Clinical Trial Eligibility Assistant
 
 This AI-powered application helps healthcare professionals quickly evaluate patient eligibility for clinical trials through automated profile creation, policy checking, and trial matching.""",
                 visible=True,
             )
-            
+
             # Then the rest in two columns
             with gr.Row():
                 with gr.Column(scale=1):
-                    app_description_left = gr.Markdown(
+                    gr.Markdown(
                         value="""### 🔄 How it Works:
 
 * **Patient Profile Generation**: Automatically generate detailed patient profiles.
@@ -1223,7 +1237,7 @@ This AI-powered application helps healthcare professionals quickly evaluate pati
                         visible=True,
                     )
                 with gr.Column(scale=1):
-                    app_description_right = gr.Markdown(
+                    gr.Markdown(
                         value="""### ⚠️ Important Notes:
 
 * **Demo Mode**: Single-user testing only, no concurrent sessions.

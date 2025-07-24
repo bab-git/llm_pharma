@@ -27,6 +27,21 @@ web_image = (
         "numpy==2.3.1",
         "pandas==2.3.1",
         "python-dotenv==1.1.0",
+        # Additional packages to prevent dependency conflicts
+        "langchain-text-splitters==0.3.8",
+        "langsmith==0.4.8",
+        "httpx==0.28.1",
+        "aiohttp==3.12.14",
+        "requests==2.32.4",
+        "pydantic==2.11.7",
+        "pydantic-settings==2.10.1",
+        "anyio==4.9.0",
+        "orjson==3.11.0",
+        "jsonlines==4.0.0",
+        "PyJWT==2.10.1",
+        "bcrypt==4.3.0",
+        "loguru==0.7.3",
+        "rich==14.0.0",
     )
     .add_local_dir(project_root / "frontend", "/root/frontend")
     .add_local_dir(project_root / "backend", "/root/backend")

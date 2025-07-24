@@ -247,7 +247,7 @@ class DatabaseManager:
         for i in range(1, 101):
             name = random.choice(full_names)
             age = random.randint(20, 80)
-            
+
             # 30% chance of having 2 or 3 diseases, 70% chance of having 1 disease
             if random.random() < 0.3:
                 # Patient has 2 or 3 diseases

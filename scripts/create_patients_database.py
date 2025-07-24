@@ -92,7 +92,9 @@ Examples:
         # Create the database
         print(f"📊 Creating patients database at: {db_path}")
         db_manager = (
-            DatabaseManager(configs=configs) if configs is not None else DatabaseManager()
+            DatabaseManager(configs=configs)
+            if configs is not None
+            else DatabaseManager()
         )
         df = db_manager.create_demo_patient_database(str(db_path))
 

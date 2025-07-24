@@ -2,6 +2,7 @@ import logging
 from typing import Any, Callable, List, Tuple
 
 from langchain_groq import ChatGroq
+
 # from langchain_openai import ChatOpenAI
 from omegaconf import DictConfig
 
@@ -45,9 +46,9 @@ class LLMManager:
             # ("llama3-8b-8192", "groq"),
         ]
         tool_model_list = [
-            ("moonshotai/kimi-k2-instruct", "groq"), # fast
-            ("qwen/qwen3-32b", "groq"),  # fast            
-            ("llama-3.3-70b-versatile", "groq"),  # Slow            
+            ("moonshotai/kimi-k2-instruct", "groq"),  # fast
+            ("qwen/qwen3-32b", "groq"),  # fast
+            ("llama-3.3-70b-versatile", "groq"),  # Slow
             ("llama3-70b-8192", "groq"),  # Slow
             ("deepseek-r1-distill-llama-70b", "groq"),  # Slow
             # ("gemma2-9b-it", "groq"), # tool fails
@@ -87,6 +88,7 @@ class LLMManager:
                 )
             elif provider == "openai":
                 from langchain_openai import ChatOpenAI
+
                 self.clients.append(
                     ChatOpenAI(model=model_id, temperature=self.temperature)
                 )
