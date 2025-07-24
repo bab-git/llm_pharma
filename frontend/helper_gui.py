@@ -129,7 +129,7 @@ This AI-powered application helps healthcare professionals quickly evaluate pati
             gr.update(visible=debug_mode),  # count_bx
             gr.update(visible=debug_mode),  # thread_pd
             gr.update(visible=debug_mode),  # step_pd
-            gr.update(visible=debug_mode),  # session_info
+            # gr.update(visible=debug_mode),  # session_info
         ]
 
     # === Helper Methods for State Updates ===
@@ -522,16 +522,16 @@ Your options:
                     label="🔧 Debug Mode",
                     value=False,
                     scale=0,
-                    min_width=120,
+                    min_width=100,
                 )
-                session_info = gr.Textbox(
-                    label="Session ID (Demo: Single User)",
-                    value=f"Session: {self.session_id[:8]}...",
-                    interactive=False,
-                    scale=0,
-                    min_width=120,
-                    visible=False,
-                )
+                # session_info = gr.Textbox(
+                #     label="Session ID (Demo: Single User)",
+                #     value=f"Session: {self.session_id[:8]}...",
+                #     interactive=False,
+                #     scale=0,
+                #     min_width=120,
+                #     visible=True,
+                # )
 
             with gr.Row():
                 last_node = gr.Textbox(label="Agent's last stop", min_width=150)
@@ -594,7 +594,7 @@ Your options:
             "gen_btn": gen_btn,
             "cont_btn": cont_btn,
             "debug_mode": debug_mode,
-            "session_info": session_info,
+            # "session_info": session_info,
             "last_node": last_node,
             "eligible_bx": eligible_bx,
             "nnode_bx": nnode_bx,
@@ -1294,7 +1294,7 @@ This AI-powered application helps healthcare professionals quickly evaluate pati
                 c["count_bx"],
                 c["thread_pd"],
                 c["step_pd"],
-                c["session_info"],
+                # c["session_info"],
             ],
         )
 

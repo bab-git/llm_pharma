@@ -50,7 +50,7 @@ from backend.my_agent.workflow_manager import WorkflowManager
 
 
 @app.function(
-    # gpu="A10G:1",
+    gpu="A10G:1",
     image=web_image,
     min_containers=0,
     max_containers=1,  # Allow multiple containers for concurrent sessions
