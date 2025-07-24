@@ -10,7 +10,7 @@ from typing import Optional
 from langchain.chains.query_constructor.base import AttributeInfo
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from omegaconf import DictConfig
 from pydantic import BaseModel, Field
 
@@ -23,7 +23,7 @@ def safe_invoke(retriever, question, retries=2):
     for i in range(retries):
         try:
             return retriever.invoke(question)
-        except ValueError as e:
+        except ValueError:
             print(f"⚠️ JSON parse failed (attempt {i+1}), retrying…")
     raise RuntimeError("Failed to parse JSON after retries")
 
@@ -34,18 +34,19 @@ class grade(BaseModel):
 
     relevance_score: str = Field(description="Relevance score: 'Yes' or 'No'")
     explanation: str = Field(description="Reasons to the given relevance score.")
-    further_information: str = Field(
-        description="Additional information needed from patient's medical history"
+    further_information: Optional[str] = Field(
+        default="Not applicable",
+        description="Additional information needed from patient's medical history",
     )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "relevance_score": "Yes",
-                "explanation": "The patient has the target disease condition for this trial.",
-                "further_information": "Need to verify patient's current treatment status.",
-            }
-        }
+    # class Config:
+    #     json_schema_extra = {
+    #         "example": {
+    #             "relevance_score": "Yes",
+    #             "explanation": "The patient has the target disease condition for this trial.",
+    #             "further_information": "Need to verify patient's current treatment status.",
+    #         }
+    #     }
 
 
 class GradeHallucinations(BaseModel):
@@ -54,7 +55,7 @@ class GradeHallucinations(BaseModel):
     binary_score: str = Field(
         description="Answer is grounded in the patient's medical profile, 'yes' or 'no'"
     )
-    Reason: str = Field(description="Reasons to the given relevance score.")
+    reason: str = Field(description="Reasons to the given relevance score.")
 
 
 # --- Helper to get default LLMManagers ---
@@ -207,13 +208,15 @@ def grade_trials_node(state: AgentState) -> dict:
                 try:
                     llm_with_tool = current_model.with_structured_output(grade)
                     retrieval_grader = prompt_grader | llm_with_tool
-                    return retrieval_grader.invoke(
+                    result = retrieval_grader.invoke(
                         {
                             "patient_profile": patient_profile,
                             "document": doc_txt,
                             "trial_diseases": trial_diseases,
                         }
                     )
+                    # print(f"Grade result: {result}")
+                    return result
                 except Exception as e:
                     print(f"Structured output failed, using fallback: {e}")
                     text_response = (
@@ -231,15 +234,11 @@ def grade_trials_node(state: AgentState) -> dict:
                         and "relevance" in text_response.lower()
                     ):
                         relevance = "Yes"
-                    return type(
-                        "Grade",
-                        (),
-                        {
-                            "relevance_score": relevance,
-                            "explanation": text_response[:500],
-                            "further_information": "Additional patient history review needed",
-                        },
-                    )()
+                    return grade(
+                        relevance_score=relevance,
+                        explanation=text_response[:500],
+                        further_information="Additional patient history review needed",
+                    )
 
             trial_score = llm_manager_tool.invoke_with_fallback(
                 run_trial_score, reset=False
@@ -252,26 +251,49 @@ def grade_trials_node(state: AgentState) -> dict:
 
                 def run_hallucination():
                     current_model = llm_manager_tool.current
-                    system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
-                         Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
-                    hallucination_prompt = ChatPromptTemplate.from_messages(
-                        [
-                            ("system", system),
-                            (
-                                "human",
-                                "Patient's medical profile: \n\n {patient_profile} \n\n LLM generation: {explanation}",
-                            ),
-                        ]
+                    prompt_hallucination = PromptTemplate(
+                        template="""
+                        You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
+                        Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile.
+                        ===============
+                        Here is the patient's medical profile: {patient_profile} \n\n
+                        ===============
+                        Here is the LLM generated answer: {explanation} \n\n
+                                                
+                        Respond with:
+                        - binary_score: "yes" or "no"
+                        - reason: Your reasoning
+                        """,
+                        input_variables=["patient_profile", "explanation"],
                     )
+
+                    # system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
+                    #      Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
+                    # hallucination_prompt = ChatPromptTemplate.from_messages(
+                    #     [
+                    #         ("system", system),
+                    #         (
+                    #             "human",
+                    #             "Patient's medical profile: \n\n {patient_profile} \n\n LLM generated answer: {explanation}",
+                    #         ),
+                    #     ]
+                    # )
+
                     llm_with_tool_hallucination = current_model.with_structured_output(
                         GradeHallucinations
                     )
+                    # hallucination_grader = hallucination_prompt | llm_with_tool_hallucination
                     hallucination_grader = (
-                        hallucination_prompt | llm_with_tool_hallucination
+                        prompt_hallucination | llm_with_tool_hallucination
                     )
-                    return hallucination_grader.invoke(
-                        {"patient_profile": patient_profile, "explanation": explanation}
+
+                    result = hallucination_grader.invoke(
+                        {
+                            "patient_profile": patient_profile,
+                            "explanation": explanation,
+                        }
                     )
+                    return result
 
                 factual_score = llm_manager_tool.invoke_with_fallback(
                     run_hallucination, reset=False

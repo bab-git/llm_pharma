@@ -1,3 +1,5 @@
+# ![App Logo](frontend/static/image_source.jpg)
+
 # LLM Pharma - Clinical Trial Management System
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
@@ -25,6 +27,53 @@ LLM Pharma is an intelligent clinical trial management system that automates the
 - **Prevent hallucinations** through advanced grading and verification systems
 - **Provide interactive dashboards** for clinical research coordinators
 
+## 🧩 Process Flow
+
+The LLM Pharma system follows a structured process flow to evaluate patient eligibility for clinical trials:
+
+1. **Data Collection and Preprocessing**: Import and prepare patient data for analysis
+2. **Patient Profile Analysis**: Utilize LLMs to analyze patient data and extract relevant information
+3. **Eligibility Verification**: Assess patient data against clinical trial policies to determine eligibility
+4. **Trial Matching**: Use agentic workflows to identify suitable trials for patients
+5. **Hallucination Prevention**: Implement a hallucination grader to ensure model outputs are contextually accurate
+
+## 📊 Features
+
+### Core Capabilities
+
+- **Patient Data Management**: SQLite database with 100+ demo patients
+- **Semantic Search**: ChromaDB vector stores with Nomic embeddings
+- **Multi-Model LLM**: Groq and OpenAI integration with fallback logic
+- **Policy Evaluation**: Automated compliance checking with ReAct agent
+- **Trial Matching**: Intelligent matching with metadata filtering
+- **Hallucination Prevention**: Advanced grading with verification
+- **Interactive Interface**: Modern web UI with real-time processing
+
+### Advanced Features
+
+- **Self-Query Retrieval**: Metadata-aware trial search
+- **Multi-step Workflows**: LangGraph-based agent orchestration  
+- **Tool Integration**: Date calculations and numerical operations
+- **Profile Rewriting**: Adaptive profile enhancement for better matches
+- **Thread Management**: Multi-session support with state persistence
+- **Demo Mode**: Dummy workflow for testing and demonstration
+- **Configuration Management**: Hydra-based flexible configuration
+
+## 🗄️ Demo Databases
+
+The system includes demo databases for:
+
+- **Patients**: A SQLite database with 100+ demo patients
+- **Diseases**: A comprehensive list of diseases for trial matching
+- **Clinical Trials**: Data on various clinical trials for matching
+- **Clinical Policies**: Institutional policies stored in ChromaDB for compliance checking
+
+## 🧠 RAG Strategies and Human-in-the-Loop
+
+- **RAG Strategies**: The system employs different Retrieval-Augmented Generation strategies to enhance trial matching
+- **Hallucination Guard**: Advanced grading and verification systems prevent hallucinations in model outputs
+- **Human-in-the-Loop**: Allows clinical research coordinators to review and adjust trial matching results
+
 ## 🛠️ Tech Stack
 
 - **Python 3.12+**: Core programming language
@@ -39,35 +88,6 @@ LLM Pharma is an intelligent clinical trial management system that automates the
 - **Hydra**: Configuration management
 - **Poetry**: Dependency management
 - **Pytest**: Testing framework
-
-## 🏗️ Architecture
-
-The system is built using a modular architecture with the following key components:
-
-### Backend Modules (`backend/my_agent/`)
-- **WorkflowManager**: Orchestrates the LangGraph-based evaluation workflow
-- **LLMManager**: Handles multiple LLM models with fallback logic (Groq/OpenAI)
-- **DatabaseManager**: Manages SQLite patient database and ChromaDB vector stores
-- **PolicyService**: Handles policy evaluation and eligibility assessment
-- **TrialService**: Manages trial matching and relevance scoring
-- **PatientCollector**: Handles patient data collection and profile generation
-- **State Management**: TypedDict-based workflow state management
-
-### Frontend (`frontend/`)
-- **Gradio Web Interface**: Interactive dashboard with multi-tab results
-- **Real-time Processing**: Live workflow execution with status updates
-- **Thread Management**: Multi-session support with state persistence
-- **Demo Mode**: Dummy workflow for testing and demonstration
-
-### Data Setup (`scripts/`)
-- **Master Setup Script**: Complete data initialization
-- **Patients Database Creator**: SQLite database with demo patients
-- **Policies Vector Store Creator**: ChromaDB for institutional policies
-- **Trials Vector Store Creator**: ChromaDB for clinical trials data
-
-### Configuration (`config/`)
-- **Hydra Configuration**: Centralized config management with YAML files
-- **Environment Management**: Secure API key and settings management
 
 ## 🚀 Quick Start
 
@@ -118,6 +138,35 @@ python frontend/app.py --demo
 ```bash
 python frontend/app.py --host 0.0.0.0 --port 8080 --share
 ```
+
+## 🏗️ Architecture
+
+The system is built using a modular architecture with the following key components:
+
+### Backend Modules (`backend/my_agent/`)
+- **WorkflowManager**: Orchestrates the LangGraph-based evaluation workflow
+- **LLMManager**: Handles multiple LLM models with fallback logic (Groq/OpenAI)
+- **DatabaseManager**: Manages SQLite patient database and ChromaDB vector stores
+- **PolicyService**: Handles policy evaluation and eligibility assessment
+- **TrialService**: Manages trial matching and relevance scoring
+- **PatientCollector**: Handles patient data collection and profile generation
+- **State Management**: TypedDict-based workflow state management
+
+### Frontend (`frontend/`)
+- **Gradio Web Interface**: Interactive dashboard with multi-tab results
+- **Real-time Processing**: Live workflow execution with status updates
+- **Thread Management**: Multi-session support with state persistence
+- **Demo Mode**: Dummy workflow for testing and demonstration
+
+### Data Setup (`scripts/`)
+- **Master Setup Script**: Complete data initialization
+- **Patients Database Creator**: SQLite database with demo patients
+- **Policies Vector Store Creator**: ChromaDB for institutional policies
+- **Trials Vector Store Creator**: ChromaDB for clinical trials data
+
+### Configuration (`config/`)
+- **Hydra Configuration**: Centralized config management with YAML files
+- **Environment Management**: Secure API key and settings management
 
 ## 📁 Project Structure
 
@@ -235,30 +284,6 @@ print(f"Policy Eligible: {result['policy_eligible']}")
 print(f"Trials Found: {result['trial_found']}")
 ```
 
-## 🧪 Testing
-
-The project includes comprehensive unit, integration, and regression tests:
-
-```bash
-# Run all tests
-make test-all
-
-# Run unit tests only
-make test-unit
-
-# Run integration tests only  
-make test-integration
-
-# Run regression tests
-make test-regression
-```
-
-### Test Coverage
-
-- **Unit Tests**: Individual module functionality
-- **Integration Tests**: Module interaction testing
-- **Regression Tests**: End-to-end workflow validation
-
 ## 🔄 Development Workflow
 
 ### Available Make Commands
@@ -285,31 +310,33 @@ make clean             # Clean up build artifacts
 - **isort**: Import sorting
 - **pytest**: Testing framework
 
-## 📊 Features
+## 🧪 Testing
 
-### Core Capabilities
+The project includes comprehensive unit, integration, and regression tests:
 
-- **Patient Data Management**: SQLite database with 100+ demo patients
-- **Semantic Search**: ChromaDB vector stores with Nomic embeddings
-- **Multi-Model LLM**: Groq and OpenAI integration with fallback logic
-- **Policy Evaluation**: Automated compliance checking with ReAct agent
-- **Trial Matching**: Intelligent matching with metadata filtering
-- **Hallucination Prevention**: Advanced grading with verification
-- **Interactive Interface**: Modern web UI with real-time processing
+```bash
+# Run all tests
+make test-all
 
-### Advanced Features
+# Run unit tests only
+make test-unit
 
-- **Self-Query Retrieval**: Metadata-aware trial search
-- **Multi-step Workflows**: LangGraph-based agent orchestration  
-- **Tool Integration**: Date calculations and numerical operations
-- **Profile Rewriting**: Adaptive profile enhancement for better matches
-- **Thread Management**: Multi-session support with state persistence
-- **Demo Mode**: Dummy workflow for testing and demonstration
-- **Configuration Management**: Hydra-based flexible configuration
+# Run integration tests only  
+make test-integration
+
+# Run regression tests
+make test-regression
+```
+
+### Test Coverage
+
+- **Unit Tests**: Individual module functionality
+- **Integration Tests**: Module interaction testing
+- **Regression Tests**: End-to-end workflow validation
 
 ## 🔒 Security & Privacy
 
-- **Data Privacy**: Patient names and IDs are removed from processing
+- **Synthetic Data**: All patient data is synthetic and created for demonstration purposes - no real names or persons are used
 - **Secure Configuration**: Environment-based API key management
 - **Input Validation**: Comprehensive data validation and sanitization
 - **Error Handling**: Graceful error handling with informative messages
@@ -352,23 +379,13 @@ For detailed information about specific components:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
-
-- **LangChain & LangGraph**: For the agent framework and workflow orchestration
-- **Groq**: For fast and reliable LLM inference
-- **OpenAI**: For the powerful GPT model capabilities
-- **ChromaDB**: For vector database functionality
-- **Gradio**: For the interactive web interface
-- **Hydra**: For configuration management
-
 ## 📞 Support
 
 For questions, issues, or contributions:
 
 1. **Check the Issues**: Look for existing issues or create a new one
 2. **Documentation**: Review component-specific README files
-3. **Tests**: Run the test suite to verify functionality
-4. **Configuration**: Check your configuration files and environment variables
+3. **Tests**: Run the test suite to verify functionality  
 
 ## 🚧 Future Enhancements
 
@@ -381,4 +398,17 @@ For questions, issues, or contributions:
 
 ---
 
-**Note**: This system is designed for research and demonstration purposes. For production clinical trial management, consult with healthcare professionals and ensure compliance with relevant regulations and standards. 
+**Note**: This system is designed for research and demonstration purposes. For production clinical trial management, consult with healthcare professionals and ensure compliance with relevant regulations and standards.
+
+## 👨‍💻 Author
+
+**Bob Hosseini**
+
+- **Email**: [bbkhosseini@gmail.com](mailto:bbkhosseini@gmail.com)
+- **LinkedIn**: [linkedin.com/in/bobhosseini](https://linkedin.com/in/bobhosseini)
+- **GitHub**: [github.com/bab-git](https://github.com/bab-git)
+- **Website**: [bob-hosseini-portfolio.web.app](https://bob-hosseini-portfolio.web.app/)
+
+---
+
+*Built with ❤️ for advancing clinical trial management through AI* 

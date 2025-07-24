@@ -60,8 +60,9 @@ from pydantic import BaseModel, Field
 
 # Import required components
 from backend.my_agent.database_manager import DatabaseManager
-from backend.my_agent.patient_collector import AgentState, PatientCollectorConfig
-from .State import AgentState, create_agent_state
+from backend.my_agent.patient_collector import PatientCollectorConfig
+
+from .State import AgentState
 
 _ = load_dotenv(find_dotenv())  # read local .env file
 
@@ -438,7 +439,7 @@ Available tools: {tool_names}
                 "last_node": "policy_evaluator",
                 "policy_eligible": policy_eligible.lower() == "yes",
                 "rejection_reason": rejection_reason,
-                "revision_number": state.get("revision_number", 0) + 1,
+                # "revision_number": state.get("revision_number", 0) + 1,
                 "checked_policy": policy_doc,
                 "policy_qs": policy_qs,
                 "unchecked_policies": unchecked_policies,

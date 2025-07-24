@@ -54,7 +54,7 @@ Install required packages:
 """
 
 import os
-from typing import List, Optional, TypedDict
+from typing import Optional
 
 from dotenv import find_dotenv, load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage

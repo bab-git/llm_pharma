@@ -124,7 +124,7 @@ Examples:
         print(f"📦 Collection name: {args.collection_name}")
 
         db_manager = (
-            DatabaseManager(config=config) if config is not None else DatabaseManager()
+            DatabaseManager(configs=config) if config is not None else DatabaseManager()
         )
         vectorstore = db_manager.create_policy_vectorstore(
             policy_file_path=str(policy_file),

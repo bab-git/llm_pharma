@@ -4,6 +4,7 @@ Simplified LLM Pharma Frontend App
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -40,29 +41,25 @@ def create_workflow_manager(demo: bool, configs=None):
     """
     if demo:
         from demo_graph import create_demo_graph
+
         # Demo returns a compiled graph directly, not a WorkflowManager
         return create_demo_graph()
 
-    # Import here to avoid circular imports
-    import os
+    # import os
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-    from backend.my_agent.llm_manager import LLMManager
     from backend.my_agent.workflow_manager import WorkflowManager
 
-    # Use passed configs
-    llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-    llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-
     # Create and return workflow manager
-    workflow_manager = WorkflowManager(
-        llm_manager=llm_manager, llm_manager_tool=llm_manager_tool, configs=configs
-    )
+    workflow_manager = WorkflowManager(configs=configs)
     return workflow_manager
 
 
 def main():
     # Load environment and parse CLI
     load_dotenv(find_dotenv())
+    print(f"OpenAI API Key: {os.environ.get('OPENAI_API_KEY', 'Not found')}")
+    print(f"Groq API Key: {os.environ.get('GROQ_API_KEY', 'Not found')[-20:]}")
+
     parser = argparse.ArgumentParser(description="LLM Pharma Frontend")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=7958)
@@ -71,9 +68,10 @@ def main():
     args = parser.parse_args()
 
     # Load configs at the top
-    import os
-    from omegaconf import OmegaConf
-    configs_path = os.path.join(os.path.dirname(__file__), "..", "config", "config.yaml")
+    # import os
+    configs_path = os.path.join(
+        os.path.dirname(__file__), "..", "config", "config.yaml"
+    )
     configs = OmegaConf.load(configs_path)
 
     # Ensure necessary databases
@@ -81,7 +79,9 @@ def main():
     from backend.my_agent.database_manager import DatabaseManager
 
     db_manager = DatabaseManager(configs=configs)
-    patients_db = make_absolute(os.path.join(configs.directories.sql_server, "patients.db"))
+    patients_db = make_absolute(
+        os.path.join(configs.directories.sql_server, "patients.db")
+    )
     ensure_path_exists(patients_db, db_manager.create_demo_patient_database)
 
     trials_csv = make_absolute(configs.files.trials_csv)

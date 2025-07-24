@@ -1,7 +1,12 @@
 import os
+import uuid
+from pathlib import Path
 
 import gradio as gr
 import pandas as pd
+
+root_path = Path(__file__).parent
+image_path = root_path / "static" / "image_source.jpg"
 
 
 class trials_gui:
@@ -10,18 +15,35 @@ class trials_gui:
     # Data-driven mappings
     NODE_NOTIFICATIONS = {
         "patient_collector": "Check Patient Profile - Patient profile has been created",
-        "policy_search": "Check Policy Conflict - Relevant Clinical Policies have been retrieved",
-        "policy_evaluator": "Check Policy Conflict - In case of policy conflict, your action is needed",
+        "policy_search": "Check Clinical Policy Conflict - Relevant Clinical Policies have been retrieved",
+        "policy_evaluator": "Check Clinical Policy Conflict - In case of clinical policy conflict, your action is needed",
         "trial_search": "Check Potential Trials - Potentially relevant clinical trials have been found",
         "grade_trials": "Check Trials Scores - Calculated Trial Relevance scores are ready",
         "profile_rewriter": "Go to Profile Tab - Patient profile has been updated",
     }
 
     APP_DESCRIPTION = """## 🏥 Clinical Trial Eligibility Assistant
+This AI-powered application helps healthcare professionals quickly evaluate patient eligibility for clinical trials through automated profile creation, policy checking, and trial matching.
 
-**Purpose:** This AI-powered application helps healthcare professionals evaluate patient eligibility for clinical trials by analyzing patient data, reviewing trial policies, and matching patients with appropriate studies.
+### 🔄 How it Works:
 
-**How it works:** The system uses a multi-stage evaluation process to assess patient compatibility with available clinical trials, ensuring both patient safety and trial requirements are met."""
+* **Patient Profile Generation**: Automatically generate detailed patient profiles.
+* **Clinical Policy Check**: Identify and resolve policy conflicts.
+* **Trial Matching**: Match patients with suitable clinical trials.
+* **Trial Relevance Scoring**: Provide clear relevance scores for matched trials.
+
+### ⚠️ Important Notes:
+
+* **Demo Mode**: Single-user testing only, no concurrent sessions.
+* **General-purpose Models**: Not specialized for medical decisions.
+* **Performance**: Response times may vary due to free-tier model limitations.
+
+### 🚨 Cautions:
+
+* Ensure patient data is anonymized before entry.
+* Use this app only as a supportive tool, not for final clinical decisions.
+
+"""
 
     def __init__(self, workflow_manager_or_graph, share=False):
         # Handle both WorkflowManager and compiled graph
@@ -38,11 +60,79 @@ class trials_gui:
         self.partial_message = ""
         self.response = {}
         self.max_iterations = 10
-        self.iterations = []
-        self.threads = []
-        self.thread_id = -1
-        self.thread = {"configurable": {"thread_id": str(self.thread_id)}}
+
+        # Session-based state management
+        self.session_id = str(uuid.uuid4())  # Generate unique session ID
+        self.iterations = {}  # Store iterations per session
+        self.threads = {}  # Store active threads per session
+        self.thread_counter = 0  # Internal counter for this session
+        self.thread = {"configurable": {"thread_id": self.session_id}}
+
         self.demo = self.create_interface()
+
+    def get_current_session_thread_id(self):
+        """Get the current thread ID for this session"""
+        return f"{self.session_id}_{self.thread_counter}"
+
+    def create_new_thread_for_session(self):
+        """Create a new thread for the current session"""
+        self.thread_counter += 1
+        thread_id = self.get_current_session_thread_id()
+        if self.session_id not in self.threads:
+            self.threads[self.session_id] = []
+        self.threads[self.session_id].append(thread_id)
+        self.thread = {"configurable": {"thread_id": thread_id}}
+        return thread_id
+
+    def get_session_threads(self):
+        """Get all threads for the current session"""
+        return self.threads.get(self.session_id, [])
+
+    def cleanup_session(self):
+        """Clean up the current session's state for memory management"""
+        try:
+            # Clean up threads for this session
+            session_threads = self.get_session_threads()
+
+            if self.workflow_manager and hasattr(
+                self.workflow_manager, "cleanup_session_state"
+            ):
+                # Use WorkflowManager's cleanup if available
+                result = self.workflow_manager.cleanup_session_state(self.session_id)
+                print(f"Session cleanup result: {result}")
+
+            # Clean up local session state
+            if self.session_id in self.threads:
+                del self.threads[self.session_id]
+            if self.session_id in self.iterations:
+                del self.iterations[self.session_id]
+
+            return {
+                "success": True,
+                "message": f"Cleaned up session {self.session_id[:8]}",
+                "threads_cleaned": len(session_threads),
+            }
+        except Exception as e:
+            print(f"Error during session cleanup: {e}")
+            return {"success": False, "error_message": str(e)}
+
+    def __del__(self):
+        """Cleanup when the object is destroyed"""
+        try:
+            self.cleanup_session()
+        except Exception:
+            pass  # Ignore errors during cleanup
+
+    def toggle_debug_fields(self, debug_mode):
+        """Toggle visibility of debug fields"""
+        return [
+            gr.update(visible=debug_mode),  # threadid_bx
+            gr.update(visible=debug_mode),  # search_bx
+            gr.update(visible=debug_mode),  # count_bx
+            gr.update(visible=debug_mode),  # thread_pd
+            gr.update(visible=debug_mode),  # step_pd
+            # gr.update(visible=debug_mode),  # session_info
+        ]
 
     # === Helper Methods for State Updates ===
 
@@ -56,7 +146,7 @@ class trials_gui:
 
         if label is None and current_values.values:
             last_node, nnode, thread_id, rev, astep = self.get_disp_state()
-            label = f"last_node: {last_node}, thread_id: {self.thread_id}, rev: {rev}, step: {astep}"
+            label = f"last_node: {last_node}, thread_id: {thread_id}, rev: {rev}, step: {astep}"
 
         return gr.update(value=val, label=label, lines=lines)
 
@@ -64,9 +154,9 @@ class trials_gui:
         """Get placeholder text for different components"""
         placeholders = {
             "patient_profile": "Patient profile will appear here after evaluation starts...",
-            "policies": "Current policies will appear here after policy search...",
-            "trials": "Potential trials will appear here after policy evaluation...",
-            "policy_status": "Policy issues will appear here when conflicts are detected...",
+            "policies": "Current clinical policies will appear here after policy search...",
+            "trials": "Potential trials will appear here after clinical policy evaluation...",
+            "policy_status": "Clinical policy issues will appear here when conflicts are detected...",
             "stages_history": "Stages execution history will appear here as the agent runs...",
         }
         return placeholders.get(key, "No data available")
@@ -78,7 +168,8 @@ class trials_gui:
         acount = current_state.values.get("revision_number", 0)
         rev = current_state.values.get("revision_number", 0)
         nnode = current_state.next
-        return last_node, nnode, self.thread_id, rev, acount
+        current_thread_id = self.get_current_session_thread_id()
+        return last_node, nnode, current_thread_id, rev, acount
 
     # === Notification Logic ===
 
@@ -103,15 +194,18 @@ class trials_gui:
         if trial_found is True:
             return "🎉 Trial Scores - Perfectly Matched clinical trials have been found! 🎉"
         elif last_node == "grade_trials":
-            return """⚠️ Trials Scores - No matched trials found. Please review the relevance scores for more details.
+            return """⚠️ Trials Scores - No matched trials found. Please review the TRIAL SCORES (bottom tab) for more details.
 Your options:            
-   A - Continue with auto-generated profile rewriter --> Continue Evaluation,
+   A - Continue and let the AI rewrite the patient profile to better match trials,
    B - Manually modify the patient profile to better match trials."""
         elif last_node == "trial_search" and trials == []:
             if nnode is None:
                 return "Agent Tab - The pipeline couldn't find any potential/relevant trials. Try another patient."
         elif last_node == "profile_rewriter":
             return "Go to Profile Tab - The patient profile has been rewritten by the agent to increase the chances of finding relevant trials. You can also manually modify the patient profile."
+        elif last_node == "policy_evaluator":
+            if nnode == "trial_search":
+                return "Continue Evaluation to see the trial search results."
 
         return self.NODE_NOTIFICATIONS.get(last_node, f"Agent is at: {last_node}")
 
@@ -136,7 +230,7 @@ Your options:
 
         if not state_values or "policies" not in state_values:
             return gr.update(
-                label="📜 Policies Related to the Patient",
+                label="📜 Clinical Policies Related to the Patient",
                 value=self.placeholder_for("policies"),
             )
 
@@ -159,10 +253,11 @@ Your options:
 
         if not state_values or "last_node" not in state_values:
             return gr.update(
-                label="Policy Status", value="No policy evaluation started yet"
+                label="Clinical Policy Status",
+                value="No clinical policy evaluation started yet",
             )
 
-        policy_status = "No policy checked yet"
+        policy_status = "No clinical policy checked yet"
 
         if "checked_policy" in state_values and state_values["checked_policy"]:
             checked_policy = state_values["checked_policy"]
@@ -172,30 +267,24 @@ Your options:
             # Get policy title/header
             policy_content = checked_policy.page_content
             policy_header = (
-                policy_content.split("\n")[0] if policy_content else "Policy"
+                policy_content.split("\n")[0] if policy_content else "Clinical Policy"
             )
 
             if policy_eligible is True:
                 status_icon = "✅"
                 status_text = "PASSED"
-                policy_status = (
-                    f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
-                )
+                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
             elif policy_eligible is False:
                 status_icon = "❌"
                 status_text = "FAILED"
-                policy_status = (
-                    f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
-                )
+                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
 
                 if rejection_reason:
                     policy_status += f"\n\n🚨 **Rejection Reason:**\n{rejection_reason}"
             else:
                 status_icon = "❓"
                 status_text = "UNKNOWN"
-                policy_status = (
-                    f"{status_icon} Last Policy: {policy_header}\nStatus: {status_text}"
-                )
+                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
 
         return gr.update(value=policy_status)
 
@@ -257,8 +346,10 @@ Your options:
             return pd.DataFrame(
                 {
                     "nctid": ["No trials found yet"],
-                    "diseases": ["Complete policy evaluation first"],
-                    "relevance": ["Trials will be searched after policy check"],
+                    "diseases": ["Complete clinical policy evaluation first"],
+                    "relevance": [
+                        "Trials will be searched after clinical policy check"
+                    ],
                 }
             )
 
@@ -274,11 +365,13 @@ Your options:
 
                 last_node = state.values.get("last_node", "unknown")
                 revision_number = state.values.get("revision_number", 0)
-                thread_ts = state.config["configurable"].get("thread_ts", "unknown")
 
-                # Create a stage entry
+                # Use session ID instead of unknown timestamp
+                session_short = self.session_id[:8]
+
+                # Create a stage entry with session ID
                 stage_entry = (
-                    f"Step {revision_number}: {last_node} (ts: {thread_ts[-8:]})"
+                    f"Step {revision_number}: {last_node} (Session: {session_short})"
                 )
                 stages_list.append(stage_entry)
 
@@ -292,7 +385,9 @@ Your options:
 
             stages_text = "\n".join(stages_list)
             last_node, nnode, thread_id, rev, astep = self.get_disp_state()
-            new_label = f"Stages History (Thread: {thread_id}, Current: {last_node})"
+            new_label = (
+                f"Stages History (Session: {self.session_id[:8]}, Current: {last_node})"
+            )
 
             return gr.update(label=new_label, value=stages_text)
 
@@ -379,8 +474,10 @@ Your options:
                 df = pd.DataFrame(
                     {
                         "index": ["No trials retrieved yet"],
-                        "nctid": ["Complete policy evaluation first"],
-                        "diseases": ["Trials will be searched after policy check"],
+                        "nctid": ["Complete clinical policy evaluation first"],
+                        "diseases": [
+                            "Trials will be searched after clinical policy check"
+                        ],
                         "Criteria": ["Continue evaluation in the Agent tab"],
                     }
                 )
@@ -393,47 +490,19 @@ Your options:
     def build_agent_tab(self):
         """Build the main agent control tab"""
         with gr.Tab("Agent"):
-            # Concise agent tab explanation with two columns
-            with gr.Row():
-                with gr.Column(scale=1):
-                    gr.Markdown(
-                        value="""## 🤖 Agent Control Center
-
-**Start Here:**
-- ➡️ **Enter Patient Query**
-- ➡️ **Click 'Start Evaluation'**
-- ➡️ **Monitor Progress via Notifications**
-
-**Tips:**
-- 💡 **Follow Notifications:** They guide you through each step
-- 💡 **Use 'Manage Agent'** for advanced options and configurations
-""",
-                        visible=True,
-                    )
-                with gr.Column(scale=1):
-                    gr.Markdown(
-                        value="""## Process Overview:
-
-- 🔍 **Profile Creation:** Generate a patient profile
-- ⚠️ **Policy Check:** Identify and resolve conflicting clinical policies
-- 🔄 **Trial Matching:** Find potential clinical trial matches
-- 🎯 **Trial Relevance:** Determine relevant trials for the patient
-""",
-                        visible=True,
-                    )
 
             with gr.Row():
                 with gr.Column(scale=2):
                     prompt_bx = gr.Textbox(
                         label="Prompt about patient",
-                        value="Is patient_ID 56 eligible for any medical trial?",
+                        value="Is patient_ID 41 eligible for any medical trial?",
                         lines=3,
                     )
                 with gr.Column(scale=1):
                     patient_id_dropdown = gr.Dropdown(
                         choices=[f"Patient {i}" for i in range(1, 100)],
                         label="Select Patient ID",
-                        value="Patient 56",
+                        value="Patient 41",
                         interactive=True,
                     )
                 tab_notification = gr.Textbox(
@@ -455,8 +524,19 @@ Your options:
                 )
                 cont_btn = gr.Button("Continue Evaluation", scale=0, min_width=120)
                 debug_mode = gr.Checkbox(
-                    label="🔧 Debug Mode", value=False, scale=0, min_width=120,
+                    label="🔧 Debug Mode",
+                    value=False,
+                    scale=0,
+                    min_width=100,
                 )
+                # session_info = gr.Textbox(
+                #     label="Session ID (Demo: Single User)",
+                #     value=f"Session: {self.session_id[:8]}...",
+                #     interactive=False,
+                #     scale=0,
+                #     min_width=120,
+                #     visible=True,
+                # )
 
             with gr.Row():
                 last_node = gr.Textbox(label="Agent's last stop", min_width=150)
@@ -484,8 +564,15 @@ Your options:
                     min_width=400,
                 )
                 with gr.Row():
+                    # Initialize with current session thread ID to avoid Gradio warning
+                    initial_threads = self.get_session_threads()
+                    current_thread_id = self.get_current_session_thread_id()
+                    if current_thread_id not in initial_threads:
+                        initial_threads.append(current_thread_id)
+
                     thread_pd = gr.Dropdown(
-                        choices=self.threads,
+                        choices=initial_threads,
+                        value=current_thread_id if initial_threads else None,
                         interactive=True,
                         label="select thread",
                         min_width=120,
@@ -512,6 +599,7 @@ Your options:
             "gen_btn": gen_btn,
             "cont_btn": cont_btn,
             "debug_mode": debug_mode,
+            # "session_info": session_info,
             "last_node": last_node,
             "eligible_bx": eligible_bx,
             "nnode_bx": nnode_bx,
@@ -534,13 +622,14 @@ Your options:
                 )
                 profile_help = gr.Markdown(
                     value="""**✏️ You can directly change the text and press the 'Modify' button**, especially in cases of:
-- ⚠️ **Conflicts with trial policies**
-- 🔍 **When relevant trials cannot be found**
+- ⚠️ **Conflicts between patient profile and trial policies**
 - 📝 **Helping patient to match specific trial**""",
                     visible=False,
                 )
             with gr.Column(scale=1):
-                modify_profile_btn = gr.Button("✏️ Modify Profile", min_width=120, elem_classes=["my-special-btn"])
+                modify_profile_btn = gr.Button(
+                    "✏️ Modify Profile", min_width=120, elem_classes=["my-special-btn"]
+                )
         with gr.Row(elem_id="profile-section"):
             current_profile = gr.Textbox(
                 label="",
@@ -554,26 +643,32 @@ Your options:
             with gr.Row():
                 with gr.Column(scale=3):
                     policy_title = gr.Markdown(
-                        value="## ⚠️ Policy Conflict Resolution", visible=True
+                        value="## ⚠️ Clinical Policy Conflict Resolution", visible=True
                     )
                     policy_conflict_info = gr.Markdown(
-                        value="""**🚨 Policy Conflict Detected**
+                        value="""**🚨 Clinical Policy Conflict Detected**
 
-- **⏭️ Skip if this policy is not relevant**
+- **⏭️ Skip if this clinical policy is not relevant**
 - **🔧 Modify patient profile if needed**
-- **⏭️⏭️ Skip all policy checks for the patient**""",
+- **⏭️⏭️ Skip all clinical policy checks for the patient**""",
                         visible=False,
                     )
                 with gr.Column(scale=1):
-                    policy_skip_btn = gr.Button("⏭️ Skip Policy", min_width=120, elem_classes=["my-special-btn"])
+                    policy_skip_btn = gr.Button(
+                        "⏭️ Skip Clinical Policy",
+                        min_width=120,
+                        elem_classes=["my-special-btn"],
+                    )
                     policy_big_skip_btn = gr.Button(
-                        "⏭️ Skip All Policies", min_width=140, elem_classes=["my-special-btn"]
+                        "⏭️ Skip All Clinical Policies",
+                        min_width=140,
+                        elem_classes=["my-special-btn"],
                     )
             with gr.Row():
                 # Left column: Current Policies
                 with gr.Column(scale=1):
                     current_policies = gr.Textbox(
-                        label="📜 Policies Related to the Patient",
+                        label="📜 Clinical Policies Related to the Patient",
                         lines=15,
                         interactive=False,
                         placeholder=self.placeholder_for("policies"),
@@ -581,7 +676,7 @@ Your options:
                 # Right column: Policy Issues
                 with gr.Column(scale=1):
                     policy_status = gr.Textbox(
-                        label="⚠️ Policy Issues & Conflicts",
+                        label="⚠️ Clinical Policy Issues & Conflicts",
                         lines=4,
                         interactive=False,
                         placeholder=self.placeholder_for("policy_status"),
@@ -629,12 +724,12 @@ You can obtain more information about each trial's details and possible relevanc
         """Build Potential Trials and Trials Scores tabs"""
         tabs_components = {}
 
-        with gr.Tab("Potential Trials"):
+        with gr.Tab("POTENTIAL TRIALS"):
             # Add informative text at the top of the Matched Trials tab
             gr.Markdown(
                 value="""## 🎯 Matched Clinical Trials
 
-**📊 View trials** that match the patient's profile after policy evaluation.
+**📊 View trials** that match the patient's profile after clinical policy evaluation.
 
 **What you'll see:**
 - **📋 Trial details** including study descriptions and requirements
@@ -646,12 +741,14 @@ You can obtain more information about each trial's details and possible relevanc
 
 **If no trials appear:**
 - Check **'Profile'** tab to adjust patient information
-- Review **'Policies'** tab for restrictive policies""",
+- Review **'Clinical Policies'** tab for restrictive clinical policies""",
                 visible=True,
             )
 
             with gr.Row():
-                refresh_trials_btn = gr.Button("Refresh", elem_classes=["my-special-btn"])
+                refresh_trials_btn = gr.Button(
+                    "Refresh", elem_classes=["my-special-btn"]
+                )
             trials_bx = gr.Dataframe(
                 label="Retrieved relevant trials based on patient's profile",
                 wrap=True,
@@ -661,7 +758,7 @@ You can obtain more information about each trial's details and possible relevanc
             tabs_components["refresh_trials_btn"] = refresh_trials_btn
             tabs_components["trials_bx"] = trials_bx
 
-        with gr.Tab("Trials Scores"):
+        with gr.Tab("TRIAL SCORES"):
             # Add informative text at the top of the Trials Scores tab
             gr.Markdown(
                 value="""## 📊 Trial Eligibility Scores
@@ -681,7 +778,9 @@ You can obtain more information about each trial's details and possible relevanc
                 visible=True,
             )
             with gr.Row():
-                refresh_scores_btn = gr.Button("Refresh", elem_classes=["my-special-btn"])
+                refresh_scores_btn = gr.Button(
+                    "Refresh", elem_classes=["my-special-btn"]
+                )
             trials_scores_bx = gr.Dataframe(
                 label="Trials Scores based on patient's profile",
                 wrap=True,
@@ -700,17 +799,7 @@ You can obtain more information about each trial's details and possible relevanc
         if patient_selection and patient_selection.startswith("Patient "):
             patient_id = patient_selection.split(" ")[1]
             return f"Is patient_ID {patient_id} eligible for any medical trial?"
-        return "Is patient_ID 56 eligible for any medical trial?"
-
-    def toggle_debug_fields(self, debug_enabled):
-        """Toggle visibility of debug fields"""
-        return [
-            gr.update(visible=debug_enabled),  # threadid_bx
-            gr.update(visible=debug_enabled),  # search_bx
-            gr.update(visible=debug_enabled),  # count_bx
-            gr.update(visible=debug_enabled),  # thread_pd
-            gr.update(visible=debug_enabled),  # step_pd
-        ]
+        return "Is patient_ID 41 eligible for any medical trial?"
 
     def show_processing(self):
         """Show processing status"""
@@ -731,16 +820,16 @@ You can obtain more information about each trial's details and possible relevanc
         """Skip the current policy and show confirmation message"""
         self.modify_state("policy_skip", self.SENTINEL_NONE, "")
         return gr.update(
-            label="Policy Skipped",
-            value="The current policy is skipped for this patient.\n\nPlease continue evaluation of remaining policies in the Agent tab.",
+            label="Clinical Policy Skipped",
+            value="The current clinical policy is skipped for this patient.\n\nPlease continue evaluation of remaining clinical policies in the Agent tab.",
         )
 
     def big_skip_policy_and_notify(self):
         """Skip the whole policy check and show confirmation message"""
         self.modify_state("policy_big_skip", self.SENTINEL_NONE, "")
         return gr.update(
-            label="Policy Skipped",
-            value="✅ The 'policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches, via the Agent tab.",
+            label="Clinical Policy Skipped",
+            value="✅ The 'clinical policy check phase' is completely skipped for this patient.\n\nPlease continue the next phase, Trial searches.\n\n ===> [Continue Evaluation].",
         )
 
     def refresh_all_status(self, skip_policy_status_update=False):
@@ -810,15 +899,22 @@ You can obtain more information about each trial's details and possible relevanc
         for state in self.graph.get_state_history(self.thread):
             if state.metadata.get("step", 0) < 1:
                 continue
-            ts = state.config["configurable"].get("thread_ts", "unknown")
+            session_short = self.session_id[:8]
             tid = state.config["configurable"]["thread_id"]
             rev = state.values.get("revision_number", 0)
             ln = state.values.get("last_node", "")
             nn = state.next
-            hist.append(f"{tid}:{rev}:{ln}:{nn}:{rev}:{ts}")
+            hist.append(f"{tid}:{rev}:{ln}:{nn}:{rev}:{session_short}")
 
         # If no metadata yet, return defaults
         if not current_state.metadata:
+            session_threads = self.get_session_threads()
+            current_thread_id = self.get_current_session_thread_id()
+
+            # Ensure the current thread ID is in the choices list
+            if current_thread_id not in session_threads and session_threads:
+                session_threads.append(current_thread_id)
+
             return (
                 "",  # prompt_bx
                 gr.update(
@@ -827,10 +923,13 @@ You can obtain more information about each trial's details and possible relevanc
                 "",  # last_node
                 "",  # eligible_bx
                 "",  # nnode_bx
-                self.thread_id,  # threadid_bx
+                current_thread_id,  # threadid_bx
                 "",  # count_bx
                 gr.update(choices=["N/A"], value="N/A"),  # step_pd
-                gr.update(choices=self.threads, value=self.thread_id),  # thread_pd
+                gr.update(
+                    choices=session_threads,
+                    value=current_thread_id if session_threads else None,
+                ),  # thread_pd
                 "",  # search_bx
             )
 
@@ -857,13 +956,20 @@ You can obtain more information about each trial's details and possible relevanc
         elif current_state.next is None:
             nn = "END"
         # 5) thread id
-        tid = self.thread_id
+        tid = self.get_current_session_thread_id()
         # 6) revision count
         cnt = vals.get("revision_number", "")
         # 7) step_pd update
         step_upd = gr.update(choices=hist, value=hist[0] if hist else None)
         # 8) thread_pd update
-        thread_upd = gr.update(choices=self.threads, value=self.thread_id)
+        session_threads = self.get_session_threads()
+        current_thread_id = self.get_current_session_thread_id()
+
+        # Ensure the current thread ID is in the choices list
+        if current_thread_id not in session_threads:
+            session_threads.append(current_thread_id)
+
+        thread_upd = gr.update(choices=session_threads, value=current_thread_id)
         # 9) search_bx
         search_cnt = vals.get("trial_searches", "")
 
@@ -885,7 +991,9 @@ You can obtain more information about each trial's details and possible relevanc
     def run_agent(self, start, patient_prompt, stop_after):
         """Main agent execution function"""
         if start:
-            self.iterations.append(0)
+            self.iterations[self.session_id] = (
+                0  # Initialize iterations for the session
+            )
             # Get the current selected model from the state
             current_values = self.graph.get_state(self.thread)
             selected_model = (
@@ -903,12 +1011,13 @@ You can obtain more information about each trial's details and possible relevanc
                 "last_node": "",
                 "selected_model": selected_model,
             }
-            self.thread_id += 1  # new agent, new thread
-            self.threads.append(self.thread_id)
+            self.thread_counter += 1  # Increment thread counter for this session
+            self.thread = {
+                "configurable": {"thread_id": self.get_current_session_thread_id()}
+            }
         else:
             config = None
-        self.thread = {"configurable": {"thread_id": str(self.thread_id)}}
-        while self.iterations[self.thread_id] < self.max_iterations:
+        while self.iterations[self.session_id] < self.max_iterations:
             # Use graph for execution (works for both WorkflowManager and demo)
             if config:
                 # Initial run with config
@@ -917,7 +1026,7 @@ You can obtain more information about each trial's details and possible relevanc
                 # Continue execution
                 self.response = self.graph.invoke(None, self.thread)
 
-            self.iterations[self.thread_id] += 1
+            self.iterations[self.session_id] += 1
             self.partial_message += str(self.response)
             self.partial_message += f"\n {'='*40}\n\n"
             last_node, nnode, _, rev, acount = self.get_disp_state()
@@ -1005,9 +1114,14 @@ You can obtain more information about each trial's details and possible relevanc
         return
 
     def switch_thread(self, new_thread_id):
-        """Switch to a different thread"""
-        self.thread = {"configurable": {"thread_id": str(new_thread_id)}}
-        self.thread_id = new_thread_id
+        """Switch to a different thread within the current session"""
+        if new_thread_id in self.get_session_threads():
+            self.thread = {"configurable": {"thread_id": str(new_thread_id)}}
+            # Update the thread counter to match the selected thread
+            try:
+                self.thread_counter = int(new_thread_id.split("_")[-1])
+            except (ValueError, IndexError):
+                pass  # Keep current counter if parsing fails
         return
 
     def find_config(self, thread_ts):
@@ -1094,8 +1208,44 @@ You can obtain more information about each trial's details and possible relevanc
             """,
         ) as demo:
 
-            # Add app description at the very top
-            # app_description = gr.Markdown(value=self.APP_DESCRIPTION, visible=True)
+            # Add image at the very top
+            gr.Image(
+                value=str(image_path),
+                show_label=False,
+                show_download_button=False,
+                elem_id="dashboard-header-image",
+            )
+
+            # Add app description at the very top - title and description in single column
+            gr.Markdown(
+                value="""## 🏥 Clinical Trial Eligibility Assistant
+
+This AI-powered application helps healthcare professionals quickly evaluate patient eligibility for clinical trials through automated profile creation, policy checking, and trial matching.""",
+                visible=True,
+            )
+
+            # Then the rest in two columns
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown(
+                        value="""### 🔄 How it Works:
+
+* **Patient Profile Generation**: Automatically generate detailed patient profiles.
+* **Policy Check**: Identifies possible conflicts between patient profiles and clinical policies.
+* **Trial Matching**: Matches patients with potential clinical trials.
+* **Relevance Scoring**: Determines relevance scores and their reasons for matched clinical trials.""",
+                        visible=True,
+                    )
+                with gr.Column(scale=1):
+                    gr.Markdown(
+                        value="""### ⚠️ Important Notes:
+
+* **Demo Mode**: Single-user testing only, no concurrent sessions.
+* **General-purpose Models**: Not specialized for medical decisions.
+* **Performance**: Response times may vary due to free-tier model limitations.
+""",
+                        visible=True,
+                    )
 
             # Build all UI components
             agent_components = self.build_agent_tab()
@@ -1158,6 +1308,7 @@ You can obtain more information about each trial's details and possible relevanc
                 c["count_bx"],
                 c["thread_pd"],
                 c["step_pd"],
+                # c["session_info"],
             ],
         )
 

@@ -208,13 +208,7 @@ class DatabaseManager:
         try:
             with open(self.default_disease_mapping_path, "r") as file:
                 trial_diseases = json.load(file)
-            list_trial_diseases = list(
-                {
-                    disease
-                    for diseases in trial_diseases.values()
-                    for disease in diseases
-                }
-            )
+            list_trial_diseases = list(trial_diseases.keys())
         except FileNotFoundError:
             # Fallback if diseases file not found
             list_trial_diseases = [
@@ -253,7 +247,16 @@ class DatabaseManager:
         for i in range(1, 101):
             name = random.choice(full_names)
             age = random.randint(20, 80)
-            medical_history = random.choice(all_conditions)
+
+            # 30% chance of having 2 or 3 diseases, 70% chance of having 1 disease
+            if random.random() < 0.3:
+                # Patient has 2 or 3 diseases
+                num_diseases = random.choice([2, 3])
+                selected_conditions = random.sample(all_conditions, num_diseases)
+                medical_history = "; ".join(selected_conditions)
+            else:
+                # Patient has 1 disease
+                medical_history = random.choice(all_conditions)
 
             # 50% chance of having previous trials
             if random.choice([True, False]):
