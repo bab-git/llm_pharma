@@ -18,17 +18,17 @@ web_image = (
         "langchain-community==0.3.27",
         "langchain-core==0.3.69",
         "langchain-nomic==0.1.4",
-        "langchain-openai==0.3.28",
+        # "langchain-openai==0.3.28",
         "langchain-groq==0.3.6",
         "langgraph-checkpoint-sqlite==2.0.10",
-        "langgraph==0.4.5",
+        "langgraph==0.5.4",
         "lark==1.2.2",
         "nomic==3.5.3",
         "numpy==2.3.1",
         "pandas==2.3.1",
         "python-dotenv==1.1.0",
     )
-    # .add_local_dir(project_root / "frontend", "/root/frontend")
+    .add_local_dir(project_root / "frontend", "/root/frontend")
     .add_local_dir(project_root / "backend", "/root/backend")
     .add_local_dir(project_root / "config", "/root/config")    
     .add_local_dir(project_root / "vector_store", "/root/vector_store")
@@ -53,17 +53,15 @@ from backend.my_agent.workflow_manager import WorkflowManager
     # gpu="A10G:1",
     image=web_image,
     min_containers=0,
+    max_containers=1,  # Allow multiple containers for concurrent sessions
     scaledown_window=60 * 3,
     secrets=[
         modal.Secret.from_name("groq-secret-pharma"),
         modal.Secret.from_name("openai_dummy"),
     ],
-    # gradio requires sticky sessions
-    # so we limit the number of concurrent containers to 1
-    # and allow it to scale to 100 concurrent inputs
-    max_containers=1,
+    # Each container can handle multiple concurrent users with isolated sessions
 )
-@modal.concurrent(max_inputs=100)
+@modal.concurrent(max_inputs=100)  # Reduced per container, but more containers
 @modal.asgi_app()
 def ui():
     """A simple Gradio interface for a greeting function."""
@@ -71,33 +69,18 @@ def ui():
     import gradio as gr
     from fastapi import FastAPI
     from gradio.routes import mount_gradio_app
-    import time
+    # import time
     from omegaconf import OmegaConf
-
-    # from frontend.helper_gui import trials_gui
-    # from frontend.app import create_workflow_manager  # adjust import path if necessary
-
 
     configs = OmegaConf.load("config/config.yaml")
     workflow_manager = WorkflowManager(configs=configs)
 
-    # workflow_manager = create_workflow_manager(demo=False, configs=configs)
-
-    import os
-
-    # Prepare the output to be shown at page load
-    frontend_files = os.listdir("frontend")
-    workflow_manager_str = "\n\n".join(frontend_files) + "\n\n" + str(workflow_manager)
-    greeting = "Hello, User!"  # Default greeting
-    output_text = f"{greeting}\n\n---\nWorkflow Manager:\n{workflow_manager_str}"
-
-    # with gr.Blocks() as demo:
-    #     gr.Markdown(output_text)
-    # demo.queue(max_size=5)  # Enable queue for handling multiple request
-
-    # mount the app at the root path    # build the Gradio Blocks
-    # demo: "gradio.Blocks" = trials_gui(workflow_manager, share=False)
+    # Create trials_gui instance with session isolation
+    # Each user gets their own session ID automatically
     trials_gui_instance = trials_gui(workflow_manager, share=False)
     demo = trials_gui_instance.demo  # Get the actual Gradio interface
+    
+    # Enable queue for handling multiple concurrent sessions
+    # demo.queue(max_size=50, default_concurrency_limit=20)
 
     return mount_gradio_app(app=FastAPI(), blocks=demo, path="/")

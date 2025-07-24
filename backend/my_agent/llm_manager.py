@@ -2,7 +2,7 @@ import logging
 from typing import Any, Callable, List, Tuple
 
 from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
+# from langchain_openai import ChatOpenAI
 from omegaconf import DictConfig
 
 
@@ -86,6 +86,7 @@ class LLMManager:
                     ChatGroq(model=model_id, temperature=self.temperature)
                 )
             elif provider == "openai":
+                from langchain_openai import ChatOpenAI
                 self.clients.append(
                     ChatOpenAI(model=model_id, temperature=self.temperature)
                 )
