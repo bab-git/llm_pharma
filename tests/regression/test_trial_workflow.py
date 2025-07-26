@@ -11,6 +11,11 @@ Usage:
 import os
 import sys
 import argparse
+from dotenv import load_dotenv, find_dotenv
+
+# Load environment variables from a .env file if present
+_ = load_dotenv(find_dotenv())
+
 
 # Add the project root directory to the Python path
 # The test is in tests/regression/, so we need to go up 2 levels to reach the project root
@@ -25,32 +30,62 @@ def test_trial_workflow(patient_id: int = 41):
     print(f"🎯 Testing with Patient ID: {patient_id}")
 
     try:
+        # Check for required API keys
+        groq_key = os.getenv("GROQ_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        
+        if not groq_key and not openai_key:
+            print("❌ No API keys found in environment variables")
+            print("Please set one of the following to run this test:")
+            print("   - GROQ_API_KEY (recommended for free tier)")
+            print("   - OPENAI_API_KEY")
+            print("\nExample:")
+            print("   export GROQ_API_KEY=your_groq_api_key_here")
+            return False
+        
+        if groq_key:
+            print(f"✅ Using GROQ_API_KEY: {groq_key[:10]}...")
+        if openai_key:
+            print(f"✅ Using OPENAI_API_KEY: {openai_key[:10]}...")
+
         # Import all necessary components
         from backend.my_agent.State import create_agent_state
-        from backend.my_agent.trial_service import grade_trials_node, trial_search_node
+        from backend.my_agent.trial_service import TrialService
+        from backend.my_agent.llm_manager import LLMManager
+        from backend.my_agent.database_manager import DatabaseManager
 
         print("✅ All imports successful")
+
+        # Create required dependencies for TrialService
+        llm_manager, llm_manager_tool = LLMManager.get_default_managers()
+        db_manager = DatabaseManager()
+        
+        # Create TrialService instance with required dependencies
+        trial_service = TrialService(
+            llm_manager=llm_manager,
+            llm_manager_tool=llm_manager_tool,
+            db_manager=db_manager
+        )
 
         # Test 1: Patient collection for specified patient
         print(f"\n1. Testing patient collection for patient {patient_id}...")
         state = create_agent_state()
         state["patient_prompt"] = f"I need information about patient {patient_id}"
 
-        # Try current version first (PatientService)
+        # Create PatientService with required dependencies
         try:
             from backend.my_agent.patient_collector import PatientService
-            print("   Trying PatientService approach...")
-            patient_service = PatientService()
+            print("   Creating PatientService with dependencies...")
+            patient_service = PatientService(
+                llm_manager=llm_manager,
+                llm_manager_tool=llm_manager_tool,
+                db_manager=db_manager
+            )
             result = patient_service.patient_collector_node(state)
             print("   ✅ PatientService approach successful")
         except Exception as e:
-            print(f"   ⚠️ PatientService approach failed: {e}")
-            print("   Trying standalone functions approach...")
-            
-            # Fallback to standalone functions
-            from backend.my_agent.patient_collector import patient_collector_node
-            result = patient_collector_node(state)
-            print("   ✅ Standalone functions approach successful")
+            print(f"   ❌ PatientService approach failed: {e}")
+            raise e
         
 #         result['patient_profile'] = """The patient is a 43-year-old individual with a medical history of generalized anxiety disorder. 
 # They previously participated in the clinical trial identified by NCT03081690 but withdrew on February 28, 2025. 
@@ -70,7 +105,7 @@ def test_trial_workflow(patient_id: int = 41):
             print(f"   - {key}: {value}")
 
         # Skip policy search and evaluation - go directly to trial search
-        trial_result = trial_search_node(state)
+        trial_result = trial_service.trial_search_node(state)
         print("✅ Trial search completed")
         print(f"   - Trials found: {len(trial_result.get('trials', []))}")
         print(f"   - Last Node: {trial_result.get('last_node', 'N/A')}")
@@ -105,7 +140,7 @@ def test_trial_workflow(patient_id: int = 41):
         print("\n3. Testing trial evaluation...")
         state.update(trial_result)
         if state.get("trials"):
-            grade_result = grade_trials_node(state)
+            grade_result = trial_service.grade_trials_node(state)
             print("✅ Trial evaluation completed")
             print(f"   - Relevant trials: {len(grade_result.get('relevant_trials', []))}")
             print(f"   - Trial found: {grade_result.get('trial_found', 'N/A')}")

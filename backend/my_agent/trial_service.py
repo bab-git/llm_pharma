@@ -6,7 +6,7 @@ This module handles trial matching and relevance scoring for the LLM Pharma clin
 
 import logging
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 from threading import Lock
 
 from langchain.chains.query_constructor.base import AttributeInfo
@@ -44,24 +44,6 @@ class GradeHallucinations(BaseModel):
         description="Answer is grounded in the patient's medical profile, 'yes' or 'no'"
     )
     reason: str = Field(description="Reasons to the given relevance score.")
-
-
-class TrialSearchState(BaseModel):
-    """State returned by trial search node."""
-    last_node: Literal["trial_search"]
-    trials: List[Document]
-    trial_searches: int
-    policy_eligible: bool
-    error_message: Optional[str] = None
-
-
-class TrialGradeState(BaseModel):
-    """State returned by trial grading node."""
-    last_node: Literal["grade_trials"]
-    relevant_trials: List[Dict[str, Any]]
-    policy_eligible: bool
-    trial_found: bool
-    error_message: Optional[str] = None
 
 
 class TrialService:
@@ -103,15 +85,6 @@ class TrialService:
         # Setup prompts and chains once
         self._setup_prompts()
         self._setup_metadata()
-
-    @classmethod
-    def from_config(cls, configs: DictConfig) -> "TrialService":
-        """Create TrialService from Hydra config."""
-        # This method is kept for backward compatibility but creates its own managers
-        llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-        llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-        db_manager = DatabaseManager(configs=configs)
-        return cls(llm_manager, llm_manager_tool, db_manager, configs)
 
     def _setup_prompts(self):
         """Setup prompt templates for trial grading and hallucination checking."""
@@ -548,55 +521,10 @@ class TrialService:
             }
 
 
-# Standalone functions for backward compatibility
-def get_default_trial_service(config: Optional[DictConfig] = None) -> TrialService:
-    """Get default trial service instance."""
-    if config is not None:
-        return TrialService.from_config(config)
-    else:
-        # Create default managers for standalone usage
-        llm_manager, llm_manager_tool = LLMManager.get_default_managers()
-        db_manager = DatabaseManager()
-        return TrialService(llm_manager, llm_manager_tool, db_manager)
-
-
-def trial_search_node(state: AgentState, configs: Optional[DictConfig] = None) -> AgentState:
-    """
-    Standalone trial search node function for backward compatibility.
-    
-    Args:
-        state: Current agent state containing patient profile
-        configs: Optional config for service initialization
-        
-    Returns:
-        Updated state with retrieved trials
-    """
-    trial_service = get_default_trial_service(configs)
-    return trial_service.trial_search_node(state)
-
-
-def grade_trials_node(state: AgentState) -> AgentState:
-    """
-    Standalone grade trials node function for backward compatibility.
-    
-    Args:
-        state: Current agent state containing trials and patient profile
-        
-    Returns:
-        Updated state with graded trials
-    """
-    trial_service = get_default_trial_service()
-    return trial_service.grade_trials_node(state)
-
-
 # Public API
 __all__ = [
     "TrialService",
     "TrialGrade", 
     "GradeHallucinations",
-    "TrialSearchState",
-    "TrialGradeState",
     "Relevance",
-    "trial_search_node",
-    "grade_trials_node",
 ]
