@@ -89,32 +89,53 @@ class TrialService:
         # Trial grading prompt
         self.trial_grade_prompt = PromptTemplate(
             template="""
-            You are a Principal Investigator (PI) for evaluating patients for clinical trials.
-            Your task is to evaluate the relevance of a clinical trial to the given patient's medical profile.
-            The clinical trial is related to these diseases: {trial_diseases}
-            Here are the inclusion and exclusion criteria of the trial:
+            You are a Principal Investigator (PI) evaluating the relevance of clinical trials to patients' medical profiles.
 
+            Your task is to determine if a clinical trial is relevant for a patient based on the trial's inclusion and exclusion criteria.
+
+            Clinical trial diseases: {trial_diseases}
+
+            Trial Criteria:
             {document}
 
-            ===============
-            Use the following steps to determine relevance and provide the necessary fields in your response:
-            1- If the patient's profile meets any exclusion criteria, then the trial is not relevant --> relevance_score = 'No'.
-            2- If the patient has or had the trial's inclusion diseases, then it is relevant --> relevance_score = 'Yes'.
-            3- If the patient did not have the trial's inclusion diseases, then it is not relevant --> relevance_score = 'No'.
-            
-            Example 1: The patient has Arthritis and the trial is related to pancreatic cancer. --> relevance_score = 'No'
-            Example 2: The patient has pancreatic cancer and the trial is also related to carcinoma pancreatic cancer. --> relevance_score = 'Yes'
-            Example 3: The patient has pancreatic cancer and the trial is related to breast cancer or ovarian cancer. --> relevance_score = 'No'.
-            
-            Bring your justification in the explanation.
-            Mention further information that is needed from the patient's medical history related to the trial's criteria
-            ===============
-            Here is the patient's medical profile: {patient_profile}
+            ==============
+
+            Steps for determining relevance:
+
+            1. Review exclusion criteria first. If the patient meets any critical exclusion criteria that clearly disqualify them from participation, relevance_score = 'No'.
+
+            2. Evaluate inclusion criteria:
+            - If the patient's condition matches or closely relates to the trial's target diseases, relevance_score = 'Yes', even if minor clarifications are needed.
+            - If the patient's condition does not relate to trial diseases, relevance_score = 'No'.
+
+            3. If the patient partially meets inclusion criteria but the information provided is insufficient, provide relevance_score = 'Yes', and clearly specify in further_information what additional details would clarify eligibility.
+
+            ==============
+
+            Example 1:
+            Patient: Has arthritis.
+            Trial: Related to pancreatic cancer.
+            Result: relevance_score = 'No'.
+
+            Example 2:
+            Patient: Has generalized anxiety disorder.
+            Trial: Related to generalized anxiety disorder, but requires a specific anxiety scale score that isn't provided.
+            Result: relevance_score = 'Yes' (Further info needed: Patient's Hamilton Anxiety Scale score).
+
+            Example 3:
+            Patient: Has generalized anxiety disorder and other unrelated minor conditions.
+            Trial: Related to generalized anxiety disorder.
+            Result: relevance_score = 'Yes' (Assuming no critical exclusions apply).
+
+            ==============
+
+            Patient Medical Profile:
+            {patient_profile}
 
             Respond with:
             - relevance_score: "Yes" or "No"
-            - explanation: Your reasoning
-            - further_information: What additional info is needed
+            - explanation: Brief, factual reasoning
+            - further_information: Specify clearly if additional details from patient's medical history are needed to confirm eligibility
             """,
             input_variables=["document", "patient_profile", "trial_diseases"],
         )
