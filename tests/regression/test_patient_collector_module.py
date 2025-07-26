@@ -15,11 +15,10 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from backend.my_agent.patient_collector import (
-    PatientCollectorConfig,
-    create_agent_state,
-    patient_collector_node,
-    profile_rewriter_node,
+    PatientService,
+    PatientId,
 )
+from backend.my_agent.State import create_agent_state
 
 
 def test_patient_collector():
@@ -35,54 +34,54 @@ def test_patient_collector():
     print(f"   - patient_profile: {state['patient_profile']}")
     print(f"   - policy_eligible: {state['policy_eligible']}")
 
-    # Test 2: Test Patient_ID schema
-    print("\n2. Testing Patient_ID schema...")
+    # Test 2: Test PatientId schema
+    print("\n2. Testing PatientId schema...")
     try:
         # This would normally be created by the LLM, but we can test the structure
-        # patient_id_data = {"patient_id": 1}
-        print("✅ Patient_ID schema structure is valid")
+        patient_id_data = {"patient_id": 1}
+        patient_id = PatientId(**patient_id_data)
+        print("✅ PatientId schema structure is valid")
+        print(f"   - patient_id: {patient_id.patient_id}")
     except Exception as e:
-        print(f"❌ Error with Patient_ID schema: {e}")
+        print(f"❌ Error with PatientId schema: {e}")
 
-    # Test 3: Test PatientCollectorConfig
-    print("\n3. Testing PatientCollectorConfig...")
+    # Test 3: Test PatientService
+    print("\n3. Testing PatientService...")
     try:
-        from backend.my_agent.llm_manager import LLMManager
-
-        llm_manager, llm_manager_tool = LLMManager.get_default_managers()
-        config = PatientCollectorConfig(
-            llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        )
-        print("✅ PatientCollectorConfig created successfully")
-        print(f"   - db_path: {config.db_path}")
-        print(f"   - model: {config.model}")
+        patient_service = PatientService()
+        print("✅ PatientService created successfully")
+        print(f"   - Service type: {type(patient_service)}")
+        print(f"   - Has llm_manager: {hasattr(patient_service, 'llm_manager')}")
+        print(f"   - Has db_manager: {hasattr(patient_service, 'db_manager')}")
     except Exception as e:
-        print(f"❌ Error creating PatientCollectorConfig: {e}")
+        print(f"❌ Error creating PatientService: {e}")
 
-    # Test 4: Test patient_collector_node (without actual LLM call)
-    print("\n4. Testing patient_collector_node structure...")
+    # Test 4: Test patient_collector_node method (without actual LLM call)
+    print("\n4. Testing patient_collector_node method...")
     try:
         # Set up a test state
         test_state = create_agent_state()
         test_state["patient_prompt"] = "I need information about patient 1"
 
-        # We won't actually run the node since it requires LLM calls,
-        # but we can test that the function exists and has the right signature
-        print("✅ patient_collector_node function exists and has correct signature")
-        print(f"   - Function: {patient_collector_node}")
+        # We won't actually run the method since it requires LLM calls,
+        # but we can test that the method exists and has the right signature
+        patient_service = PatientService()
+        print("✅ patient_collector_node method exists and has correct signature")
+        print(f"   - Method: {patient_service.patient_collector_node}")
         print(f"   - Expected to process: {test_state['patient_prompt']}")
     except Exception as e:
-        print(f"❌ Error with patient_collector_node: {e}")
+        print(f"❌ Error with patient_collector_node method: {e}")
 
-    # Test 5: Test profile_rewriter_node structure
-    print("\n5. Testing profile_rewriter_node structure...")
+    # Test 5: Test profile_rewriter_node method
+    print("\n5. Testing profile_rewriter_node method...")
     try:
-        # We won't actually run the node since it requires LLM calls,
-        # but we can test that the function exists and has the right signature
-        print("✅ profile_rewriter_node function exists and has correct signature")
-        print(f"   - Function: {profile_rewriter_node}")
+        # We won't actually run the method since it requires LLM calls,
+        # but we can test that the method exists and has the right signature
+        patient_service = PatientService()
+        print("✅ profile_rewriter_node method exists and has correct signature")
+        print(f"   - Method: {patient_service.profile_rewriter_node}")
     except Exception as e:
-        print(f"❌ Error with profile_rewriter_node: {e}")
+        print(f"❌ Error with profile_rewriter_node method: {e}")
 
     print("\n" + "=" * 50)
     print("✅ All basic structure tests passed!")
@@ -114,7 +113,8 @@ def test_full_functionality():
         test_state = create_agent_state()
         test_state["patient_prompt"] = "I need information about patient 1"
 
-        result = patient_collector_node(test_state)
+        patient_service = PatientService()
+        result = patient_service.patient_collector_node(test_state)
         print("✅ patient_collector_node executed successfully")
         print(f"   - Patient ID: {result.get('patient_id', 'N/A')}")
         print(f"   - Patient Profile: {result.get('patient_profile', 'N/A')[:100]}...")
@@ -123,7 +123,7 @@ def test_full_functionality():
         # Test profile rewriter if we have patient data
         if result.get("patient_data"):
             print("\n2. Testing profile_rewriter_node with LLM...")
-            rewrite_result = profile_rewriter_node(result)
+            rewrite_result = patient_service.profile_rewriter_node(result)
             print("✅ profile_rewriter_node executed successfully")
             print(
                 f"   - Rewritten Profile: {rewrite_result.get('patient_profile', 'N/A')[:100]}..."

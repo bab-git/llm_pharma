@@ -115,8 +115,6 @@ class WorkflowManager:
         import os
         import sys
 
-        from .patient_collector import AgentState
-
         backend_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if backend_path not in sys.path:
             sys.path.append(backend_path)
