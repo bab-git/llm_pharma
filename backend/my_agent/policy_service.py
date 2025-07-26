@@ -110,19 +110,6 @@ class PolicyService:
             self.llm_manager, self.llm_manager_tool, self.tools, self.logger
         )
 
-    @classmethod
-    def from_config(cls, configs: DictConfig) -> "PolicyService":
-        """Create PolicyService from Hydra config."""
-        # This method is kept for backward compatibility but creates its own managers
-        from backend.my_agent.llm_manager import LLMManager
-        llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-        llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-        db_manager = DatabaseManager(configs=configs)
-        return cls(llm_manager, llm_manager_tool, db_manager, configs)
-
-
-
-
 
     def policy_search_node(self, state: AgentState) -> dict:
         """
