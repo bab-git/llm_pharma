@@ -61,6 +61,7 @@ from .policy_tool_helpers import POLICY_TOOLS
 
 # Import required components
 from backend.my_agent.database_manager import DatabaseManager
+from backend.my_agent.llm_manager import LLMManager
 from .policy import PolicySearcher, PolicyEvaluator
 
 from .State import AgentState
@@ -81,22 +82,23 @@ class PolicyService:
 
     def __init__(
         self,
+        llm_manager: LLMManager,
+        llm_manager_tool: LLMManager,
+        db_manager: DatabaseManager,
         configs: Optional[DictConfig] = None,
     ):
         """
         Initialize the PolicyService.
         Args:
-            configs: Optional Hydra config for models and paths
+            llm_manager: LLM manager for general completions
+            llm_manager_tool: LLM manager for tool calls
+            db_manager: Database manager for policy data operations
+            configs: Optional Hydra config for additional configuration
         """
-        from backend.my_agent.llm_manager import LLMManager
-
-        if configs is not None:
-            self.llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-            self.llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-            self.db_manager = DatabaseManager(configs=configs)
-        else:
-            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
-            self.db_manager = DatabaseManager()
+        # Use injected dependencies
+        self.llm_manager = llm_manager
+        self.llm_manager_tool = llm_manager_tool
+        self.db_manager = db_manager
         
         # Initialize policy tools once
         self.tools = POLICY_TOOLS
@@ -110,7 +112,13 @@ class PolicyService:
 
     @classmethod
     def from_config(cls, configs: DictConfig) -> "PolicyService":
-        return cls(configs=configs)
+        """Create PolicyService from Hydra config."""
+        # This method is kept for backward compatibility but creates its own managers
+        from backend.my_agent.llm_manager import LLMManager
+        llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+        llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
+        db_manager = DatabaseManager(configs=configs)
+        return cls(llm_manager, llm_manager_tool, db_manager, configs)
 
 
 

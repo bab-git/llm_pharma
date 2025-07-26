@@ -58,6 +58,7 @@ class WorkflowManager:
         """
         from .llm_manager import LLMManager
 
+        # Create shared dependencies once - single source of truth
         if configs is not None:
             self.llm_manager = LLMManager.from_config(configs, use_tool_models=False)
             self.llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
@@ -66,13 +67,29 @@ class WorkflowManager:
             self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
             self.db_manager = DatabaseManager()
         
-        # Initialize service instances - they will create their own LLM managers if needed
+        # Initialize service instances with injected dependencies
         from .policy_service import PolicyService
         from .patient_collector import PatientService
         from .trial_service import TrialService
-        self.policy_service = PolicyService(configs=configs)
-        self.patient_service = PatientService(configs=configs)
-        self.trial_service = TrialService(configs=configs)
+        
+        self.policy_service = PolicyService(
+            llm_manager=self.llm_manager,
+            llm_manager_tool=self.llm_manager_tool,
+            db_manager=self.db_manager,
+            configs=configs
+        )
+        self.patient_service = PatientService(
+            llm_manager=self.llm_manager,
+            llm_manager_tool=self.llm_manager_tool,
+            db_manager=self.db_manager,
+            configs=configs
+        )
+        self.trial_service = TrialService(
+            llm_manager=self.llm_manager,
+            llm_manager_tool=self.llm_manager_tool,
+            db_manager=self.db_manager,
+            configs=configs
+        )
         
         self.graph = None
         self.memory = None

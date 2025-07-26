@@ -71,25 +71,28 @@ class TrialService:
     This class encapsulates all trial operations: search, retrieval, grading, and hallucination checking.
     """
 
-    def __init__(self, configs: Optional[DictConfig] = None):
+    def __init__(
+        self,
+        llm_manager: LLMManager,
+        llm_manager_tool: LLMManager,
+        db_manager: DatabaseManager,
+        configs: Optional[DictConfig] = None,
+    ):
         """
         Initialize the TrialService.
         
         Args:
-            configs: Optional Hydra config for models and paths. If not provided,
-                    default LLM managers will be used.
+            llm_manager: LLM manager for general completions
+            llm_manager_tool: LLM manager for tool calls
+            db_manager: Database manager for trial data operations
+            configs: Optional Hydra config for additional configuration
         """
         self.logger = logging.getLogger(__name__)
         
-        # Initialize LLM managers once - single source of truth
-        if configs is not None:
-            self.llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-            self.llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-        else:
-            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
-        
-        # Initialize database manager once
-        self.db_manager = DatabaseManager(configs=configs)
+        # Use injected dependencies
+        self.llm_manager = llm_manager
+        self.llm_manager_tool = llm_manager_tool
+        self.db_manager = db_manager
         
         # Cache heavy objects with thread safety
         self._vectorstore = None
@@ -104,7 +107,11 @@ class TrialService:
     @classmethod
     def from_config(cls, configs: DictConfig) -> "TrialService":
         """Create TrialService from Hydra config."""
-        return cls(configs=configs)
+        # This method is kept for backward compatibility but creates its own managers
+        llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+        llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
+        db_manager = DatabaseManager(configs=configs)
+        return cls(llm_manager, llm_manager_tool, db_manager, configs)
 
     def _setup_prompts(self):
         """Setup prompt templates for trial grading and hallucination checking."""
@@ -546,7 +553,11 @@ def get_default_trial_service(config: Optional[DictConfig] = None) -> TrialServi
     """Get default trial service instance."""
     if config is not None:
         return TrialService.from_config(config)
-    return TrialService()
+    else:
+        # Create default managers for standalone usage
+        llm_manager, llm_manager_tool = LLMManager.get_default_managers()
+        db_manager = DatabaseManager()
+        return TrialService(llm_manager, llm_manager_tool, db_manager)
 
 
 def trial_search_node(state: AgentState, configs: Optional[DictConfig] = None) -> AgentState:

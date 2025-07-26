@@ -73,26 +73,26 @@ class PatientService:
 
     def __init__(
         self,
+        llm_manager: LLMManager,
+        llm_manager_tool: LLMManager,
+        db_manager: DatabaseManager,
         configs: Optional[DictConfig] = None,
     ):
         """
         Initialize the PatientService.
         
         Args:
-            configs: Optional Hydra config for models and paths. If not provided,
-                    default LLM managers will be used.
+            llm_manager: LLM manager for general completions
+            llm_manager_tool: LLM manager for tool calls
+            db_manager: Database manager for patient data operations
+            configs: Optional Hydra config for additional configuration
         """
         self.logger = logging.getLogger(__name__)
         
-        # Initialize LLM managers once - single source of truth
-        if configs is not None:
-            self.llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-            self.llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-        else:
-            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
-        
-        # Initialize database manager once
-        self.db_manager = DatabaseManager(configs=configs)
+        # Use injected dependencies
+        self.llm_manager = llm_manager
+        self.llm_manager_tool = llm_manager_tool
+        self.db_manager = db_manager
         
         # Setup chains once
         self._setup_chains()
@@ -100,7 +100,11 @@ class PatientService:
     @classmethod
     def from_config(cls, configs: DictConfig) -> "PatientService":
         """Create PatientService from Hydra config."""
-        return cls(configs=configs)
+        # This method is kept for backward compatibility but creates its own managers
+        llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+        llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
+        db_manager = DatabaseManager(configs=configs)
+        return cls(llm_manager, llm_manager_tool, db_manager, configs)
 
     def _setup_chains(self):
         """Setup LLM chains for profile generation and rewriting."""

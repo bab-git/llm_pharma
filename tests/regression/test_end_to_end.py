@@ -22,16 +22,30 @@ def test_end_to_end_workflow():
         from backend.my_agent.policy_service import PolicyService
         from backend.my_agent.State import create_agent_state
         from backend.my_agent.trial_service import grade_trials_node, trial_search_node
+        from backend.my_agent.llm_manager import LLMManager
+        from backend.my_agent.database_manager import DatabaseManager
 
         print("✅ All imports successful")
 
-        # Test 1: Create workflow manager and policy service
-        print("\n1. Testing WorkflowManager and PolicyService creation...")
-        # Create PolicyService instance
-        policy_service = PolicyService()
-        # Create PatientService instance
-        patient_service = PatientService()
-        print("✅ WorkflowManager and PolicyService created successfully")
+        # Test 1: Create shared dependencies and services
+        print("\n1. Testing service creation with dependency injection...")
+        
+        # Create shared dependencies
+        llm_manager, llm_manager_tool = LLMManager.get_default_managers()
+        db_manager = DatabaseManager()
+        
+        # Create service instances with injected dependencies
+        policy_service = PolicyService(
+            llm_manager=llm_manager,
+            llm_manager_tool=llm_manager_tool,
+            db_manager=db_manager
+        )
+        patient_service = PatientService(
+            llm_manager=llm_manager,
+            llm_manager_tool=llm_manager_tool,
+            db_manager=db_manager
+        )
+        print("✅ Services created successfully with dependency injection")
 
         # Test 2: Test patient collection
         print("\n2. Testing patient collection...")
@@ -122,10 +136,9 @@ def test_workflow_manager_integration():
         result = workflow_manager.run_workflow(patient_prompt)
 
         print("✅ WorkflowManager integration test successful")
-        print(f"   - Workflow completed: {result.get('completed', False)}")
-        print(
-            f"   - Final state: {result.get('final_state', {}).get('last_node', 'N/A')}"
-        )
+        print(f"   - Success: {result.get('success', False)}")
+        print(f"   - Patient ID: {result.get('patient_id', 'N/A')}")
+        print(f"   - Last Node: {result.get('last_node', 'N/A')}")
 
         return True
 
