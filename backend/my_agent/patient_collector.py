@@ -94,20 +94,7 @@ class PatientService:
         self.llm_manager_tool = llm_manager_tool
         self.db_manager = db_manager
         
-        # Setup chains once
-        self._setup_chains()
-
-    @classmethod
-    def from_config(cls, configs: DictConfig) -> "PatientService":
-        """Create PatientService from Hydra config."""
-        # This method is kept for backward compatibility but creates its own managers
-        llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-        llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-        db_manager = DatabaseManager(configs=configs)
-        return cls(llm_manager, llm_manager_tool, db_manager, configs)
-
-    def _setup_chains(self):
-        """Setup LLM chains for profile generation and rewriting."""
+                # Setup chains directly in constructor
         # Profile generation chain
         prompt_profile = PromptTemplate(
             template=PROFILE_PROMPT,
