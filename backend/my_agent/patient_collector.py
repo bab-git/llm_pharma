@@ -6,7 +6,6 @@ for the LLM Pharma clinical trial workflow system.
 """
 
 import logging
-import os
 from typing import Any, Dict, Optional
 
 from dotenv import find_dotenv, load_dotenv
@@ -24,11 +23,10 @@ from .State import AgentState
 _ = load_dotenv(find_dotenv())
 
 # Constants
-MAX_RETRIES = 2
-PROFILE_SENTENCES = 4
+# Note: MAX_RETRIES and PROFILE_SENTENCES are handled by LLMManager.invoke_with_fallback
 
 # Prompts
-PATIENT_ID_PROMPT = """You are a helpful assistance in extracting patient's medical history.
+PATIENT_ID_PROMPT = """You are a helpful assistant in extracting patient's medical history.
 Based on the following request identify and return the patient's ID number."""
 
 PROFILE_PROMPT = """You are the Clinical Research Coordinator in the screening phase of a clinical trial. 
@@ -60,7 +58,7 @@ Suggested relevant trials:
 category X: [patient's disease] can be related to X due to Y."""
 
 
-class Patient_ID(BaseModel):
+class PatientId(BaseModel):
     """Model for extracting patient ID from user prompt."""
     patient_id: int
 
@@ -75,32 +73,23 @@ class PatientService:
 
     def __init__(
         self,
-        llm_manager: Optional[LLMManager] = None,
-        llm_manager_tool: Optional[LLMManager] = None,
         configs: Optional[DictConfig] = None,
     ):
         """
         Initialize the PatientService.
         
         Args:
-            llm_manager: LLM manager for completions (optional, will create default if not provided)
-            llm_manager_tool: LLM manager for tool calls (optional, will create default if not provided)
-            configs: Optional Hydra config for models and paths
+            configs: Optional Hydra config for models and paths. If not provided,
+                    default LLM managers will be used.
         """
         self.logger = logging.getLogger(__name__)
         
-        # Initialize LLM managers once
+        # Initialize LLM managers once - single source of truth
         if configs is not None:
-            if llm_manager is None:
-                llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-            if llm_manager_tool is None:
-                llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-        
-        if llm_manager is None or llm_manager_tool is None:
-            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
+            self.llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+            self.llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
         else:
-            self.llm_manager = llm_manager
-            self.llm_manager_tool = llm_manager_tool
+            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
         
         # Initialize database manager once
         self.db_manager = DatabaseManager(configs=configs)
@@ -142,7 +131,7 @@ class PatientService:
         try:
             def run_id_extraction():
                 current_model = self.llm_manager_tool.current
-                return current_model.with_structured_output(Patient_ID).invoke([
+                return current_model.with_structured_output(PatientId).invoke([
                     SystemMessage(content=PATIENT_ID_PROMPT),
                     HumanMessage(content=prompt)
                 ])
@@ -169,12 +158,14 @@ class PatientService:
         try:
             patient_data = self.db_manager.get_patient_data(patient_id)
             if patient_data is not None:
-                # Remove sensitive fields
-                if patient_data.get("name"):
-                    del patient_data["patient_id"]
-                    del patient_data["name"]
                 self.logger.info(f"Fetched patient data for ID {patient_id}")
-                self.logger.info(f"Patient details: {patient_data}")
+                # Log patient details at debug level to avoid sensitive data in production logs
+                self.logger.debug(f"Patient details: {patient_data}")
+                # Log a redacted summary for info level
+                age = patient_data.get('age', 'N/A')
+                medical_history = patient_data.get('medical_history', 'N/A')
+                previous_trials = patient_data.get('previous_trials', 'N/A')
+                self.logger.info(f"Patient summary: Age {age}, Medical History: {medical_history}, Previous Trials: {previous_trials}")
             else:
                 self.logger.warning(f"No patient found with ID: {patient_id}")
             return patient_data
@@ -229,7 +220,7 @@ class PatientService:
             self.logger.error(f"Error rewriting patient profile: {e}")
             return ""
 
-    def patient_collector_node(self, state: AgentState) -> Dict[str, Any]:
+    def patient_collector_node(self, state: AgentState) -> AgentState:
         """
         Patient collector node that extracts patient ID, fetches data, and generates profile.
         
@@ -273,7 +264,7 @@ class PatientService:
                 "error_message": str(e) if e else "",
             }
 
-    def profile_rewriter_node(self, state: AgentState) -> Dict[str, Any]:
+    def profile_rewriter_node(self, state: AgentState) -> AgentState:
         """
         Profile rewriter node that rewrites patient profiles when no trials are found.
         
@@ -314,5 +305,5 @@ class PatientService:
 # Public API
 __all__ = [
     "PatientService",
-    "Patient_ID",
+    "PatientId",
 ]

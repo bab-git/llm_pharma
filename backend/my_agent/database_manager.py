@@ -330,14 +330,14 @@ class DatabaseManager:
         self, patient_id: int, db_path: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Fetch all fields for the patient based on the given patient_id as an integer.
+        Fetch only non-PII fields for the patient based on the given patient_id as an integer.
 
         Args:
             patient_id: The patient ID to fetch data for
             db_path: Path to the SQLite database file. If None, uses default.
 
         Returns:
-            A dictionary containing the patient's medical history, or None if not found.
+            A dictionary containing the patient's medical history (no PII), or None if not found.
         """
         if db_path is None:
             db_path = self.default_db_path
@@ -346,7 +346,8 @@ class DatabaseManager:
 
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        query = "SELECT * FROM patients WHERE patient_id=?"
+        # Only select non-PII columns (exclude patient_id and name)
+        query = "SELECT age, medical_history, previous_trials, trial_status, trial_completion_date FROM patients WHERE patient_id=?"
         cursor.execute(query, (patient_id,))
         patient_data = cursor.fetchone()
         column_names = [column[0] for column in cursor.description]

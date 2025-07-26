@@ -18,27 +18,19 @@ def test_end_to_end_workflow():
 
     try:
         # Import all necessary components
-        # from backend.my_agent.llm_manager import LLMManager
-        from backend.my_agent.patient_collector import (
-            patient_collector_node,
-        )
+        from backend.my_agent.patient_collector import PatientService
         from backend.my_agent.policy_service import PolicyService
         from backend.my_agent.State import create_agent_state
         from backend.my_agent.trial_service import grade_trials_node, trial_search_node
-
-        # from backend.my_agent.workflow_manager import WorkflowManager
 
         print("✅ All imports successful")
 
         # Test 1: Create workflow manager and policy service
         print("\n1. Testing WorkflowManager and PolicyService creation...")
-        # llm_manager, llm_manager_tool = LLMManager.get_default_managers()
-        # workflow_manager = WorkflowManager(
-        #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        # )
-        
         # Create PolicyService instance
         policy_service = PolicyService()
+        # Create PatientService instance
+        patient_service = PatientService()
         print("✅ WorkflowManager and PolicyService created successfully")
 
         # Test 2: Test patient collection
@@ -46,7 +38,7 @@ def test_end_to_end_workflow():
         state = create_agent_state()
         state["patient_prompt"] = "I need information about patient 1"
 
-        result = patient_collector_node(state)
+        result = patient_service.patient_collector_node(state)
         print("✅ Patient collection completed")
         print(f"   - Patient ID: {result.get('patient_id', 'N/A')}")
         print(f"   - Patient Profile: {result.get('patient_profile', 'N/A')[:100]}...")
