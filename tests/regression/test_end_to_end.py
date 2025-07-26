@@ -22,10 +22,7 @@ def test_end_to_end_workflow():
         from backend.my_agent.patient_collector import (
             patient_collector_node,
         )
-        from backend.my_agent.policy_service import (
-            policy_evaluator_node,
-            policy_search_node,
-        )
+        from backend.my_agent.policy_service import PolicyService
         from backend.my_agent.State import create_agent_state
         from backend.my_agent.trial_service import grade_trials_node, trial_search_node
 
@@ -33,13 +30,16 @@ def test_end_to_end_workflow():
 
         print("✅ All imports successful")
 
-        # Test 1: Create workflow manager
-        print("\n1. Testing WorkflowManager creation...")
+        # Test 1: Create workflow manager and policy service
+        print("\n1. Testing WorkflowManager and PolicyService creation...")
         # llm_manager, llm_manager_tool = LLMManager.get_default_managers()
         # workflow_manager = WorkflowManager(
         #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
         # )
-        print("✅ WorkflowManager created successfully")
+        
+        # Create PolicyService instance
+        policy_service = PolicyService()
+        print("✅ WorkflowManager and PolicyService created successfully")
 
         # Test 2: Test patient collection
         print("\n2. Testing patient collection...")
@@ -55,7 +55,7 @@ def test_end_to_end_workflow():
         # Test 3: Test policy search
         print("\n3. Testing policy search...")
         state.update(result)
-        policy_result = policy_search_node(state)
+        policy_result = policy_service.policy_search_node(state)
         print("✅ Policy search completed")
         print(f"   - Policies found: {len(policy_result.get('policies', []))}")
         print(f"   - Last Node: {policy_result.get('last_node', 'N/A')}")
@@ -64,7 +64,7 @@ def test_end_to_end_workflow():
         print("\n4. Testing policy evaluation...")
         state.update(policy_result)
         if state.get("unchecked_policies"):
-            eval_result = policy_evaluator_node(state)
+            eval_result = policy_service.policy_evaluator_node(state)
             print("✅ Policy evaluation completed")
             print(f"   - Policy Eligible: {eval_result.get('policy_eligible', 'N/A')}")
             print(f"   - Last Node: {eval_result.get('last_node', 'N/A')}")
@@ -120,14 +120,10 @@ def test_workflow_manager_integration():
     print("=" * 60)
 
     try:
-        from backend.my_agent.llm_manager import LLMManager
         from backend.my_agent.workflow_manager import WorkflowManager
 
         # Create workflow manager
-        llm_manager, llm_manager_tool = LLMManager.get_default_managers()
-        workflow_manager = WorkflowManager(
-            llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        )
+        workflow_manager = WorkflowManager()
 
         # Test workflow execution
         patient_prompt = "I need information about patient 1"

@@ -53,10 +53,12 @@ from typing import Optional
 from dotenv import find_dotenv, load_dotenv
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 from omegaconf import DictConfig
 from pydantic import BaseModel, Field
+
+# Import the extracted policy tools
+from .policy_tool_helpers import POLICY_TOOLS
 
 # Import required components
 from backend.my_agent.database_manager import DatabaseManager
@@ -100,36 +102,25 @@ class PolicyService:
 
     def __init__(
         self,
-        llm_manager=None,
-        llm_manager_tool=None,
         configs: Optional[DictConfig] = None,
     ):
         """
         Initialize the PolicyService.
         Args:
-            llm_manager: LLM manager for completions (optional, will create default if not provided)
-            llm_manager_tool: LLM manager for tool calls (optional, will create default if not provided)
             configs: Optional Hydra config for models and paths
         """
         from backend.my_agent.llm_manager import LLMManager
 
         if configs is not None:
-            if llm_manager is None:
-                llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-            if llm_manager_tool is None:
-                llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-            self.llm_manager = llm_manager
-            self.llm_manager_tool = llm_manager_tool
+            self.llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+            self.llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
             self.db_manager = DatabaseManager(configs=configs)
         else:
-            if llm_manager is None or llm_manager_tool is None:
-                self.llm_manager, self.llm_manager_tool = (
-                    LLMManager.get_default_managers()
-                )
-            else:
-                self.llm_manager = llm_manager
-                self.llm_manager_tool = llm_manager_tool
+            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
             self.db_manager = DatabaseManager()
+        
+        # Initialize policy tools once
+        self.tools = POLICY_TOOLS
 
     @classmethod
     def from_config(cls, configs: DictConfig) -> "PolicyService":
@@ -158,47 +149,8 @@ class PolicyService:
         if llm_manager_tool is None:
             llm_manager_tool = self.llm_manager_tool
 
-        # Simplified date input schema
-        class DateInput(BaseModel):
-            past_date: str = Field(description="A past date in YYYY-MM-DD format")
-            threshold_months: int = Field(
-                description="Number of months to compare against"
-            )
-
-        @tool("get_today_date", return_direct=False)
-        def get_today_date() -> str:
-            """Returns today's date in YYYY-MM-DD format."""
-            return datetime.today().date().strftime("%Y-%m-%d")
-
-        @tool("check_months_since_date", args_schema=DateInput, return_direct=False)
-        def check_months_since_date(past_date: str, threshold_months: int) -> str:
-            """Calculate months between a past date and today, and check if within threshold."""
-            try:
-                today = datetime.today().date()
-                parsed_date = datetime.strptime(past_date, "%Y-%m-%d").date()
-                months_diff = (
-                    (today.year - parsed_date.year) * 12
-                    + today.month
-                    - parsed_date.month
-                )
-                is_within_threshold = months_diff <= threshold_months
-                return f"Months since {past_date}: {months_diff}. Within {threshold_months} months: {is_within_threshold}"
-            except ValueError:
-                return f"Invalid date format: {past_date}. Please use YYYY-MM-DD."
-
-        # Simple number comparison
-        class NumberInput(BaseModel):
-            num1: float = Field(description="First number")
-            num2: float = Field(description="Second number")
-
-        @tool("compare_numbers", args_schema=NumberInput, return_direct=False)
-        def compare_numbers(num1: float, num2: float) -> str:
-            """Compare if first number is less than second number."""
-            result = num1 < num2
-            return f"Is {num1} less than {num2}? {result}"
-
-        # Keep only the essential tools
-        tools = [get_today_date, check_months_since_date, compare_numbers]
+        # Use the pre-initialized tools
+        tools = self.tools
         tool_names = ", ".join([tool.name for tool in tools])
 
         system_message = f"""You are a Principal Investigator (PI) evaluating patients for clinical trials.
@@ -456,57 +408,3 @@ Available tools: {tool_names}
                 "policy_qs": "",
                 "error_message": str(e) if e else "",
             }
-
-
-# Standalone functions for backward compatibility
-def get_default_policy_service(config: Optional[DictConfig] = None):
-    if config is not None:
-        return PolicyService.from_config(config)
-    return PolicyService()
-
-
-def policy_search_node(state: AgentState) -> dict:
-    """
-    Standalone policy search node function for backward compatibility.
-
-    Args:
-        state: Current agent state containing patient profile
-
-    Returns:
-        Updated state with retrieved policies
-    """
-    policy_service = get_default_policy_service()
-    return policy_service.policy_search_node(state)
-
-
-def policy_evaluator_node(state: AgentState) -> dict:
-    """
-    Standalone policy evaluator node function for backward compatibility.
-
-    Args:
-        state: Current agent state containing patient profile and unchecked policies
-
-    Returns:
-        Updated state with evaluation results
-    """
-    policy_service = get_default_policy_service()
-    return policy_service.policy_evaluator_node(state)
-
-
-def policy_tools(policy_qs: str, patient_profile: str, model_agent, llm_manager_tool):
-    """
-    Standalone policy tools function for backward compatibility.
-
-    Args:
-        policy_qs: Policy questions to evaluate
-        patient_profile: Patient profile document
-        model_agent: LLM model for evaluation (deprecated)
-        llm_manager_tool: LLM manager for tool calls with fallback
-
-    Returns:
-        str: Evaluation result
-    """
-    policy_service = get_default_policy_service()
-    return policy_service.policy_tools(
-        policy_qs, patient_profile, model_agent, llm_manager_tool
-    )

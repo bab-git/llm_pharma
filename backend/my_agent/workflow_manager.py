@@ -47,32 +47,28 @@ class WorkflowManager:
 
     def __init__(
         self,
-        llm_manager: LLMManager = None,
-        llm_manager_tool: LLMManager = None,
         configs: Optional[DictConfig] = None,
     ):
         """
         Initialize the WorkflowManager.
 
         Args:
-            llm_manager: LLM manager for general completions
-            llm_manager_tool: LLM manager for tool calls
-            config: Optional Hydra config for models and paths
+            configs: Optional Hydra config for models and paths
         """
+        from .llm_manager import LLMManager
+
         if configs is not None:
-            if llm_manager is None:
-                from .llm_manager import LLMManager
-
-                llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-            if llm_manager_tool is None:
-                from .llm_manager import LLMManager
-
-                llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
+            self.llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+            self.llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
             self.db_manager = DatabaseManager(configs=configs)
         else:
-            self.llm_manager = llm_manager
-            self.llm_manager_tool = llm_manager_tool
+            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
             self.db_manager = DatabaseManager()
+        
+        # Initialize service instances - they will create their own LLM managers if needed
+        from .policy_service import PolicyService
+        self.policy_service = PolicyService(configs=configs)
+        
         self.graph = None
         self.memory = None
         self.app = None
@@ -123,7 +119,6 @@ class WorkflowManager:
         backend_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if backend_path not in sys.path:
             sys.path.append(backend_path)
-        from .policy_service import policy_evaluator_node, policy_search_node
 
         # Create the state graph
         builder = StateGraph(AgentState)
@@ -131,10 +126,10 @@ class WorkflowManager:
         # Set entry point
         builder.set_entry_point("patient_collector")
 
-        # Add nodes
+        # Add nodes - use PolicyService instance methods instead of standalone functions
         builder.add_node("patient_collector", patient_collector_node)
-        builder.add_node("policy_search", policy_search_node)
-        builder.add_node("policy_evaluator", policy_evaluator_node)
+        builder.add_node("policy_search", self.policy_service.policy_search_node)
+        builder.add_node("policy_evaluator", self.policy_service.policy_evaluator_node)
         builder.add_node("trial_search", trial_search_node)
         builder.add_node("grade_trials", grade_trials_node)
         builder.add_node("profile_rewriter", profile_rewriter_node)
