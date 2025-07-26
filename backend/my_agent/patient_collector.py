@@ -1,60 +1,13 @@
 """
 Patient Collector Module
 
-This module handles all patient data collection, profile generation, and profile rewriting functionality
+This module handles patient data collection, profile generation, and profile rewriting
 for the LLM Pharma clinical trial workflow system.
-
-COMPLETED FEATURES:
-==================
-
-1. PatientCollectorConfig - Configuration for patient collector operations
-2. Patient_ID schema - For extracting patient ID from natural language prompts
-3. patient_collector_node - Main node for patient data collection and profile generation
-4. profile_rewriter_node - Node for rewriting patient profiles when no trials are found
-5. Helper functions for patient data processing
-
-USAGE EXAMPLE:
-==============
-
-    from my_agent.patient_collector import (
-        PatientCollectorConfig,
-        patient_collector_node,
-        profile_rewriter_node,
-        create_agent_state
-    )
-
-    # Initialize the system
-    llm_manager, llm_manager_tool = get_default_llm_managers()
-    config = PatientCollectorConfig(llm_manager=llm_manager, llm_manager_tool=llm_manager_tool)
-
-    # Create initial state
-    state = create_agent_state()
-    state['patient_prompt'] = "I need information about patient 1"
-
-    # Run patient collector
-    result = patient_collector_node(state)
-
-    # Run profile rewriter if needed
-    if not result.get('trials_found', False):
-        state.update(result)
-        rewrite_result = profile_rewriter_node(state)
-
-    print(f"Patient ID: {result['patient_id']}")
-    print(f"Profile: {result['patient_profile']}")
-
-REQUIREMENTS:
-=============
-
-Make sure you have these environment variables set:
-- GROQ_API_KEY (for free Groq model usage)
-- OPENAI_API_KEY (if using OpenAI models)
-
-Install required packages:
-    pip install langchain-groq langchain-openai langchain-core langgraph
 """
 
+import logging
 import os
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from dotenv import find_dotenv, load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -64,193 +17,31 @@ from omegaconf import DictConfig
 from pydantic import BaseModel
 
 from .database_manager import DatabaseManager
-
-# Import from existing modules
 from .llm_manager import LLMManager
 from .State import AgentState
 
 # Load environment variables
 _ = load_dotenv(find_dotenv())
 
+# Constants
+MAX_RETRIES = 2
+PROFILE_SENTENCES = 4
 
-class Patient_ID(BaseModel):
-    """Model for extracting patient ID from user prompt."""
+# Prompts
+PATIENT_ID_PROMPT = """You are a helpful assistance in extracting patient's medical history.
+Based on the following request identify and return the patient's ID number."""
 
-    patient_id: int
+PROFILE_PROMPT = """You are the Clinical Research Coordinator in the screening phase of a clinical trial. 
+Use the following patient data to write the patient profile for the screening phase.
+The patient profile is a summary of the patient's information in continuous text form.    
+If they had no previous trial participation, exclude trial status and trial completion date.
+Do not ignore any available information. 
+Also suggest medical trials that can be related to patient's disease history.    
+Write the patient profile in 3 to 4 short sentences.
 
+{patient_data}"""
 
-def get_default_llm_managers():
-    """Helper to get default LLMManagers for completions and tool calls."""
-    from .llm_manager import LLMManager
-
-    return LLMManager.get_default_managers()
-
-
-class PatientCollectorConfig:
-    """Configuration for patient collector node."""
-
-    def __init__(
-        self,
-        llm_manager: LLMManager,
-        llm_manager_tool: LLMManager = None,
-        db_path="sql_server/patients.db",
-        configs: Optional[DictConfig] = None,
-    ):
-        self.llm_manager = llm_manager
-        self.llm_manager_tool = llm_manager_tool or llm_manager
-        if configs is not None:
-            self.db_path = os.path.join(configs.directories.sql_server, "patients.db")
-            self.model = llm_manager.current
-            self.model_tool = self.llm_manager_tool.current
-        else:
-            self.db_path = db_path
-            self.model = llm_manager.current
-            self.model_tool = self.llm_manager_tool.current
-        self._setup_profile_chain()
-
-    @classmethod
-    def from_config(cls, configs: DictConfig) -> "PatientCollectorConfig":
-        from .llm_manager import LLMManager
-
-        llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-        llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
-        return cls(
-            llm_manager=llm_manager, llm_manager_tool=llm_manager_tool, configs=configs
-        )
-
-    def _setup_profile_chain(self):
-        """Setup the chain for patient profile generation."""
-        parser = StrOutputParser()
-        prompt_profile = PromptTemplate(
-            template="""
-            You are the Clinical Research Coordinator in the screening phase of a clinical trial. 
-            Use the following patient data to write the patient profile for the screening phase.
-            The patient profile is a summary of the patient's information in continuous text form.    
-            If they had no previous trial participation, exclude trial status and trial completion date.\n
-            Do not ignore any available information.\n 
-            Also suggest medical trials that can be related to patient's disease history.\n    
-            Write the patient profile in 3 to 4 short sentences.\n\n
-            {patient_data}""",
-            input_variables=["patient_data"],
-        )
-        self.chain_profile = prompt_profile | self.model | parser
-
-
-def patient_collector_node(state: AgentState) -> dict:
-    """
-    Patient collector node that extracts patient ID from prompt, fetches patient data,
-    and generates patient profile.
-
-    Args:
-        state: Current agent state containing patient prompt
-
-    Returns:
-        Updated state with patient data and profile
-    """
-    try:
-        llm_manager, llm_manager_tool = get_default_llm_managers()
-        # config = PatientCollectorConfig(
-        #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        # )
-
-        patient_data_prompt = """You are a helpful assistance in extracting patient's medical history.\nBased on the following request identify and return the patient's ID number.\n"""
-
-        def run_id_extraction():
-            current_model = llm_manager_tool.current
-            return current_model.with_structured_output(Patient_ID).invoke(
-                [
-                    SystemMessage(content=patient_data_prompt),
-                    HumanMessage(content=state["patient_prompt"]),
-                ]
-            )
-
-        response = llm_manager_tool.invoke_with_fallback(run_id_extraction, reset=True)
-        patient_id = response.patient_id
-        print(f"Patient ID: {patient_id}")
-
-        db_manager = DatabaseManager()
-        patient_data = db_manager.get_patient_data(patient_id)
-        print(patient_data)
-
-        if patient_data is not None:
-            if patient_data.get("name"):
-                del patient_data["patient_id"]
-                del patient_data["name"]
-
-            def run_profile_chain():
-                current_model = llm_manager.current
-                parser = StrOutputParser()
-                prompt_profile = PromptTemplate(
-                    template="""
-                    You are the Clinical Research Coordinator in the screening phase of a clinical trial. 
-                    Use the following patient data to write the patient profile for the screening phase.
-                    The patient profile is a summary of the patient's information in continuous text form.    
-                    If they had no previous trial participation, exclude trial status and trial completion date.\n
-                    Do not ignore any available information.\n 
-                    Also suggest medical trials that can be related to patient's disease history.\n    
-                    Write the patient profile in 3 to 4 short sentences.\n\n
-                    {patient_data}""",
-                    input_variables=["patient_data"],
-                )
-                profile_chain = prompt_profile | current_model | parser
-                return profile_chain.invoke({"patient_data": patient_data})
-
-            patient_profile = llm_manager.invoke_with_fallback(
-                run_profile_chain, reset=False
-            )
-        else:
-            patient_profile = ""
-            print(f"No patient found with ID: {patient_id}")
-
-        return {
-            "last_node": "patient_collector",
-            "patient_data": patient_data or {},
-            "patient_profile": patient_profile,
-            "patient_id": patient_id,
-            "revision_number": state.get("revision_number", 0) + 1,
-            "policy_eligible": False,
-        }
-    except Exception as e:
-        print(f"❌ Error in patient collection: {e}")
-        return {
-            "last_node": "patient_collector",
-            "patient_data": {},
-            "patient_profile": "",
-            "patient_id": 0,
-            "revision_number": state.get("revision_number", 0) + 1,
-            "policy_eligible": False,
-            "error_message": str(e) if e else "",
-        }
-
-
-def profile_rewriter_node(state: AgentState) -> dict:
-    """
-    Profile rewriter node that rewrites patient profiles when no trials are found.
-
-    Args:
-        state: Current agent state containing patient data
-
-    Returns:
-        Updated state with rewritten patient profile
-    """
-    try:
-        llm_manager, llm_manager_tool = get_default_llm_managers()
-        # config = PatientCollectorConfig(
-        #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        # )
-        patient_data = state.get("patient_data", {})
-        if not patient_data:
-            print("⚠️ No patient data available for profile rewriting")
-            return {
-                "last_node": "profile_rewriter",
-                "patient_profile": state.get("patient_profile", ""),
-                "policy_eligible": state.get("policy_eligible", False),
-            }
-
-        def run_profile_rewrite():
-            current_model = llm_manager.current
-            system = """
-A trial cross match resulted in no trials for the patient.
+PROFILE_REWRITE_PROMPT = """A trial cross match resulted in no trials for the patient.
 As a clinical specialist write a medical profile for this patient and see if their disease(s) can be relevant to any of these categories of mental_health, cancer, or leukemia.
 If yes, then suggest relevant medical trial categories for the agent.
 If no, then do not add anything there.
@@ -266,53 +57,262 @@ Disregard categories which occasionally or in some cases can be relevant to pati
 example:
 The patient is a X-year-old with a medical history of Y. They have participated ........  previous trials, and their trial status and completion date .........
 Suggested relevant trials:
-category X: [patient's disease] can be related to X due to Y.
-"""
-            re_write_prompt = ChatPromptTemplate.from_messages(
-                [
-                    ("system", system),
-                    (
-                        "human",
-                        "Here is a patient data:\n\n {patient_data} \n write a patient profile.",
-                    ),
-                ]
-            )
-            profile_rewriter_chain = re_write_prompt | current_model | StrOutputParser()
-            return profile_rewriter_chain.invoke({"patient_data": patient_data})
+category X: [patient's disease] can be related to X due to Y."""
 
-        patient_profile_rewritten = llm_manager.invoke_with_fallback(
-            run_profile_rewrite, reset=True
+
+class Patient_ID(BaseModel):
+    """Model for extracting patient ID from user prompt."""
+    patient_id: int
+
+
+class PatientService:
+    """
+    Service class for patient-related operations in the clinical trial workflow.
+    
+    This class encapsulates all patient operations: ID extraction, data fetching,
+    profile generation, and profile rewriting.
+    """
+
+    def __init__(
+        self,
+        llm_manager: Optional[LLMManager] = None,
+        llm_manager_tool: Optional[LLMManager] = None,
+        configs: Optional[DictConfig] = None,
+    ):
+        """
+        Initialize the PatientService.
+        
+        Args:
+            llm_manager: LLM manager for completions (optional, will create default if not provided)
+            llm_manager_tool: LLM manager for tool calls (optional, will create default if not provided)
+            configs: Optional Hydra config for models and paths
+        """
+        self.logger = logging.getLogger(__name__)
+        
+        # Initialize LLM managers once
+        if configs is not None:
+            if llm_manager is None:
+                llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+            if llm_manager_tool is None:
+                llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
+        
+        if llm_manager is None or llm_manager_tool is None:
+            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
+        else:
+            self.llm_manager = llm_manager
+            self.llm_manager_tool = llm_manager_tool
+        
+        # Initialize database manager once
+        self.db_manager = DatabaseManager(configs=configs)
+        
+        # Setup chains once
+        self._setup_chains()
+
+    @classmethod
+    def from_config(cls, configs: DictConfig) -> "PatientService":
+        """Create PatientService from Hydra config."""
+        return cls(configs=configs)
+
+    def _setup_chains(self):
+        """Setup LLM chains for profile generation and rewriting."""
+        # Profile generation chain
+        prompt_profile = PromptTemplate(
+            template=PROFILE_PROMPT,
+            input_variables=["patient_data"]
         )
-        print("--- PROFILE REWRITER: PATIENT'S PROFILE REWRITTEN ---")
-        return {
-            "last_node": "profile_rewriter",
-            "patient_profile": patient_profile_rewritten,
-            "policy_eligible": state.get("policy_eligible", False),
-        }
-    except Exception as e:
-        print(f"❌ Error in profile rewriting: {e}")
-        return {
-            "last_node": "profile_rewriter",
-            "patient_profile": state.get("patient_profile", ""),
-            "policy_eligible": state.get("policy_eligible", False),
-            "error_message": str(e) if e else "",
-        }
+        self.profile_chain = prompt_profile | self.llm_manager.current | StrOutputParser()
+        
+        # Profile rewrite chain
+        prompt_rewrite = ChatPromptTemplate.from_messages([
+            ("system", PROFILE_REWRITE_PROMPT),
+            ("human", "Here is a patient data:\n\n {patient_data} \n write a patient profile.")
+        ])
+        self.profile_rewrite_chain = prompt_rewrite | self.llm_manager.current | StrOutputParser()
+
+    def extract_patient_id(self, prompt: str) -> int:
+        """
+        Extract patient ID from user prompt.
+        
+        Args:
+            prompt: User prompt containing patient information
+            
+        Returns:
+            Extracted patient ID
+        """
+        try:
+            def run_id_extraction():
+                current_model = self.llm_manager_tool.current
+                return current_model.with_structured_output(Patient_ID).invoke([
+                    SystemMessage(content=PATIENT_ID_PROMPT),
+                    HumanMessage(content=prompt)
+                ])
+            
+            response = self.llm_manager_tool.invoke_with_fallback(run_id_extraction, reset=True)
+            patient_id = response.patient_id
+            self.logger.info(f"Extracted Patient ID: {patient_id}")
+            return patient_id
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting patient ID: {e}")
+            raise
+
+    def fetch_patient_data(self, patient_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Fetch patient data from database.
+        
+        Args:
+            patient_id: Patient ID to fetch
+            
+        Returns:
+            Patient data dictionary or None if not found
+        """
+        try:
+            patient_data = self.db_manager.get_patient_data(patient_id)
+            if patient_data is not None:
+                # Remove sensitive fields
+                if patient_data.get("name"):
+                    del patient_data["patient_id"]
+                    del patient_data["name"]
+                self.logger.info(f"Fetched patient data for ID {patient_id}")
+                self.logger.info(f"Patient details: {patient_data}")
+            else:
+                self.logger.warning(f"No patient found with ID: {patient_id}")
+            return patient_data
+            
+        except Exception as e:
+            self.logger.error(f"Error fetching patient data: {e}")
+            return None
+
+    def build_profile(self, patient_data: Dict[str, Any]) -> str:
+        """
+        Build patient profile from patient data.
+        
+        Args:
+            patient_data: Patient data dictionary
+            
+        Returns:
+            Generated patient profile text
+        """
+        try:
+            patient_profile = self.llm_manager.invoke_with_fallback(
+                lambda: self.profile_chain.invoke({"patient_data": patient_data}),
+                reset=False
+            )
+            self.logger.info("Generated patient profile")
+            self.logger.info(f"Profile content: {patient_profile}")
+            return patient_profile
+            
+        except Exception as e:
+            self.logger.error(f"Error building patient profile: {e}")
+            return ""
+
+    def rewrite_profile(self, patient_data: Dict[str, Any]) -> str:
+        """
+        Rewrite patient profile when no trials are found.
+        
+        Args:
+            patient_data: Patient data dictionary
+            
+        Returns:
+            Rewritten patient profile text
+        """
+        try:
+            patient_profile_rewritten = self.llm_manager.invoke_with_fallback(
+                lambda: self.profile_rewrite_chain.invoke({"patient_data": patient_data}),
+                reset=True
+            )
+            self.logger.info("Rewrote patient profile")
+            self.logger.info(f"Rewritten profile content: {patient_profile_rewritten}")
+            return patient_profile_rewritten
+            
+        except Exception as e:
+            self.logger.error(f"Error rewriting patient profile: {e}")
+            return ""
+
+    def patient_collector_node(self, state: AgentState) -> Dict[str, Any]:
+        """
+        Patient collector node that extracts patient ID, fetches data, and generates profile.
+        
+        Args:
+            state: Current agent state containing patient prompt
+            
+        Returns:
+            Updated state with patient data and profile
+        """
+        try:
+            # Extract patient ID
+            patient_id = self.extract_patient_id(state["patient_prompt"])
+            
+            # Fetch patient data
+            patient_data = self.fetch_patient_data(patient_id)
+            
+            # Build profile if data exists
+            if patient_data is not None:
+                patient_profile = self.build_profile(patient_data)
+            else:
+                patient_profile = ""
+            
+            return {
+                "last_node": "patient_collector",
+                "patient_data": patient_data or {},
+                "patient_profile": patient_profile,
+                "patient_id": patient_id,
+                "revision_number": state.get("revision_number", 0) + 1,
+                "policy_eligible": False,
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in patient collection: {e}")
+            return {
+                "last_node": "patient_collector",
+                "patient_data": {},
+                "patient_profile": "",
+                "patient_id": 0,
+                "revision_number": state.get("revision_number", 0) + 1,
+                "policy_eligible": False,
+                "error_message": str(e) if e else "",
+            }
+
+    def profile_rewriter_node(self, state: AgentState) -> Dict[str, Any]:
+        """
+        Profile rewriter node that rewrites patient profiles when no trials are found.
+        
+        Args:
+            state: Current agent state containing patient data
+            
+        Returns:
+            Updated state with rewritten patient profile
+        """
+        try:
+            patient_data = state.get("patient_data", {})
+            if not patient_data:
+                self.logger.warning("No patient data available for profile rewriting")
+                return {
+                    "last_node": "profile_rewriter",
+                    "patient_profile": state.get("patient_profile", ""),
+                    "policy_eligible": state.get("policy_eligible", False),
+                }
+            
+            patient_profile_rewritten = self.rewrite_profile(patient_data)
+            
+            return {
+                "last_node": "profile_rewriter",
+                "patient_profile": patient_profile_rewritten,
+                "policy_eligible": state.get("policy_eligible", False),
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in profile rewriting: {e}")
+            return {
+                "last_node": "profile_rewriter",
+                "patient_profile": state.get("patient_profile", ""),
+                "policy_eligible": state.get("policy_eligible", False),
+                "error_message": str(e) if e else "",
+            }
 
 
-def initialize_patient_collector_system(
-    use_free_model: bool = True, config: Optional[DictConfig] = None
-) -> PatientCollectorConfig:
-    """
-    Initialize the patient collector system with appropriate LLM managers.
-    Args:
-        use_free_model: Whether to use free Groq model (default: True)
-        config: Optional Hydra config
-    Returns:
-        PatientCollectorConfig: Configured patient collector system
-    """
-    if config is not None:
-        return PatientCollectorConfig.from_config(config)
-    llm_manager, llm_manager_tool = get_default_llm_managers()
-    return PatientCollectorConfig(
-        llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-    )
+# Public API
+__all__ = [
+    "PatientService",
+    "Patient_ID",
+]
