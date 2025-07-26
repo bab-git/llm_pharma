@@ -47,6 +47,11 @@ USAGE EXAMPLE:
 
 """
 
+import logging
+from functools import cached_property
+
+# Import logging configuration
+from .logging_config import get_logger
 from datetime import datetime
 from typing import Optional
 
@@ -121,10 +126,56 @@ class PolicyService:
         
         # Initialize policy tools once
         self.tools = POLICY_TOOLS
+        self.logger = get_logger(__name__)
 
     @classmethod
     def from_config(cls, configs: DictConfig) -> "PolicyService":
         return cls(configs=configs)
+
+    @cached_property
+    def react_agent(self):
+        """Build the ReAct agent once and cache it."""
+        return create_react_agent(self.llm_manager_tool.current, self.tools, debug=False)
+
+    def _invoke_react_agent(self, system_message: str, user_message: str) -> str:
+        """Invoke the cached ReAct agent with system and user messages."""
+        return self.llm_manager_tool.invoke_with_fallback(
+            lambda: self.react_agent.invoke(
+                {
+                    "messages": [
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": user_message},
+                    ]
+                }
+            ),
+            reset=False,
+        )
+
+    def _generate_policy_questions(self, policy: str) -> str:
+        """Generate policy questions from a policy document."""
+        current_model = self.llm_manager.current
+        prompt_rps = PromptTemplate(
+            template=""" You are a Principal Investigator (PI) for clinical trials.
+                The following document contains a policy document about participation in clinical trials:\n\n{policy}\n\n
+                Your task is to rephrase each single policy from the document above into a single yes/no question.
+                Form each question so that a yes answer indicates the patient's ineligibility.
+                Do not create more questions than given number of policies.
+
+                Example: Patients who have had accidents in the past 10 months are not eligible
+                rephrased: Did patient have an accident in the past 10 months?
+
+                Example: Patients with active tuberculosis, hepatitis B or C, or HIV are excluded unless the trial is specifically designed for these conditions.
+                rephrased: Did patient have active tuberculosis, hepatitis B or C, or HIV?
+                """,
+            input_variables=["policy"],
+        )
+        policy_rps_chain = prompt_rps | current_model | StrOutputParser()
+        return policy_rps_chain.invoke({"policy": policy})
+
+    def _decide_final_eligibility(self, message: str):
+        current_model = self.llm_manager_tool.current
+        llm_with_tools = current_model.bind_tools([PolicyEligibility])
+        return llm_with_tools.invoke(message)
 
     def policy_tools(
         self,
@@ -181,26 +232,10 @@ Available tools: {tool_names}
 
         user_message_content = f"Policy Questions to Evaluate:\n{policy_qs}"
 
-        # Use simpler message format that works better with Groq
         try:
-
-            def run_react_agent():
-                # Create the react_agent inside the runnable using the current model
-                current_model = llm_manager_tool.current
-                react_agent = create_react_agent(current_model, tools, debug=False)
-                return react_agent.invoke(
-                    {
-                        "messages": [
-                            {"role": "system", "content": system_message},
-                            {"role": "user", "content": user_message_content},
-                        ]
-                    }
-                )
-
-            result = llm_manager_tool.invoke_with_fallback(run_react_agent, reset=False)
-            return result["messages"][-1].content
+            return self._invoke_react_agent(system_message, user_message_content)["messages"][-1].content
         except Exception as e:
-            print(f"Error in policy_tools: {e}")
+            self.logger.error(f"Error in policy_tools: {e}")
             # Fallback: evaluate without tools
             fallback_prompt = f"""
             As a Principal Investigator, evaluate this patient's eligibility:
@@ -211,16 +246,16 @@ Available tools: {tool_names}
 
             Answer with 'yes' if eligible, 'no' if not eligible, and include reasoning.
             """
-
             try:
-                # Use the current model from the manager for fallback too
                 current_model = llm_manager_tool.current
                 response = current_model.invoke(
-                    [{"role": "user", "content": fallback_prompt}]
+                    [
+                        {"role": "user", "content": fallback_prompt}
+                    ]
                 )
                 return response.content
             except Exception as fallback_error:
-                print(f"Fallback also failed: {fallback_error}")
+                self.logger.error(f"Fallback also failed: {fallback_error}")
                 return "Error: Unable to evaluate policy. Patient marked as not eligible for safety."
 
     def policy_search_node(self, state: AgentState) -> dict:
@@ -238,7 +273,7 @@ Available tools: {tool_names}
             patient_profile = state.get("patient_profile", "")
 
             if not patient_profile:
-                print("⚠️ No patient profile available for policy search")
+                self.logger.warning("No patient profile available for policy search")
                 return {
                     "last_node": "policy_search",
                     "policies": [],
@@ -254,9 +289,9 @@ Available tools: {tool_names}
 
             # Retrieve relevant policies
             docs_retrieved = retriever.get_relevant_documents(patient_profile)
-            print(f"Retrieved policies to be evaluated: {len(docs_retrieved)}")
+            self.logger.info(f"Retrieved policies to be evaluated: {len(docs_retrieved)}")
 
-            print(f"✅ Retrieved {len(docs_retrieved)} relevant policy sections")
+            self.logger.info(f"✅ Retrieved {len(docs_retrieved)} relevant policy sections")
 
             return {
                 "last_node": "policy_search",
@@ -266,7 +301,7 @@ Available tools: {tool_names}
             }
 
         except Exception as e:
-            print(f"❌ Error in policy search: {e}")
+            self.logger.error(f"❌ Error in policy search: {e}")
 
             return {
                 "last_node": "policy_search",
@@ -293,7 +328,7 @@ Available tools: {tool_names}
             unchecked_policies = state.get("unchecked_policies", [])
 
             if not unchecked_policies:
-                print("⚠️ No unchecked policies available for evaluation")
+                self.logger.warning("No unchecked policies available for evaluation")
                 return {
                     "last_node": "policy_evaluator",
                     "policy_eligible": state.get("policy_eligible", False),
@@ -309,13 +344,13 @@ Available tools: {tool_names}
                 if len(policy_doc.page_content.split("\n")) > 1
                 else "Policy"
             )
-            print(f"Evaluating Policy:\n {policy_header}")
+            self.logger.info(f"Evaluating Policy:\n {policy_header}")
 
             policy = policy_doc.page_content
             patient_profile = state.get("patient_profile", "")
 
             if not patient_profile:
-                print("⚠️ No patient profile available for policy evaluation")
+                self.logger.warning("No patient profile available for policy evaluation")
                 return {
                     "last_node": "policy_evaluator",
                     "policy_eligible": False,
@@ -326,53 +361,37 @@ Available tools: {tool_names}
                 }
 
             # Generate policy questions
-            def run_policy_qs():
-                current_model = self.llm_manager.current
-                prompt_rps = PromptTemplate(
-                    template=""" You are a Principal Investigator (PI) for clinical trials.
-                        The following document contains a policy document about participation in clinical trials:\n\n{policy}\n\n
-                        Your task is to rephrase each single policy from the document above into a single yes/no question.
-                        Form each question so that a yes answer indicates the patient's ineligibility.
-                        Do not create more questions than given number of policies.
-
-                        Example: Patients who have had accidents in the past 10 months are not eligible
-                        rephrased: Did patient have an accident in the past 10 months?
-
-                        Example: Patients with active tuberculosis, hepatitis B or C, or HIV are excluded unless the trial is specifically designed for these conditions.
-                        rephrased: Did patient have active tuberculosis, hepatitis B or C, or HIV?
-                        """,
-                    input_variables=["policy"],
+            try:
+                policy_qs = self.llm_manager.invoke_with_fallback(
+                    lambda: self._generate_policy_questions(policy), reset=True
                 )
-                policy_rps_chain = prompt_rps | current_model | StrOutputParser()
-                return policy_rps_chain.invoke({"policy": policy})
-
-            policy_qs = self.llm_manager.invoke_with_fallback(run_policy_qs, reset=True)
-            print(f"✅ Generated policy questions: {policy_qs}")
+                self.logger.info(f"Generated policy questions: {policy_qs}")
+            except Exception as e:
+                self.logger.error(f"Error generating policy questions: {e}")
+                policy_qs = ""
 
             # Evaluate using policy tools
-            def run_policy_tools():
-                return self.policy_tools(
-                    policy_qs, patient_profile, config.model_tool, self.llm_manager_tool
+            try:
+                result = self.llm_manager_tool.invoke_with_fallback(
+                    lambda: self.policy_tools(policy_qs, patient_profile, config.model_tool, self.llm_manager_tool),
+                    reset=False,
                 )
-
-            result = self.llm_manager_tool.invoke_with_fallback(
-                run_policy_tools, reset=False
-            )
-            print(f"✅ Policy evaluation result: {result}")
+                self.logger.info(f"Policy evaluation result: {result}")
+            except Exception as e:
+                self.logger.error(f"Error in policy_tools: {e}")
+                result = ""
 
             # Get final eligibility decision
-            message = f"""Evaluation of the patient's eligibility:\n{result}\n\nIs the patient eligible according to this policy?"""
+            message = f"Evaluation of the patient's eligibility:\n{result}\n\nIs the patient eligible according to this policy?"
+            try:
+                response = self.llm_manager_tool.invoke_with_fallback(
+                    lambda: self._decide_final_eligibility(message), reset=False
+                )
+            except Exception as e:
+                self.logger.error(f"Error in eligibility decision: {e}")
+                response = None
 
-            def run_eligibility():
-                current_model = self.llm_manager_tool.current
-                llm_with_tools = current_model.bind_tools([PolicyEligibility])
-                return llm_with_tools.invoke(message)
-
-            response = self.llm_manager_tool.invoke_with_fallback(
-                run_eligibility, reset=False
-            )
-
-            if response.tool_calls and len(response.tool_calls) > 0:
+            if response and hasattr(response, 'tool_calls') and len(response.tool_calls) > 0:
                 tool_call = response.tool_calls[0]
                 if "args" in tool_call:
                     policy_eligible = tool_call["args"].get("eligibility", "no")
@@ -385,7 +404,7 @@ Available tools: {tool_names}
                 rejection_reason = "No evaluation result available"
 
             unchecked_policies.pop(0)
-            print(f"Remaining unchecked policies: {len(unchecked_policies)}")
+            self.logger.info(f"Remaining unchecked policies: {len(unchecked_policies)}")
 
             return {
                 "last_node": "policy_evaluator",
@@ -398,7 +417,7 @@ Available tools: {tool_names}
             }
 
         except Exception as e:
-            print(f"❌ Error in policy evaluation: {e}")
+            self.logger.error(f"❌ Error in policy evaluation: {e}")
             return {
                 "last_node": "policy_evaluator",
                 "policy_eligible": False,
