@@ -36,7 +36,7 @@ def test_end_to_end_workflow():
         # Test 2: Test patient collection
         print("\n2. Testing patient collection...")
         state = create_agent_state()
-        state["patient_prompt"] = "I need information about patient 1"
+        state["patient_prompt"] = "I need information about patient 41"
 
         result = patient_service.patient_collector_node(state)
         print("✅ Patient collection completed")

@@ -446,32 +446,32 @@ class TrialService:
             patient_profile = state.get("patient_profile", "")
             if not patient_profile:
                 self.logger.warning("No patient profile available for trial search")
-                return TrialSearchState(
-                    last_node="trial_search",
-                    trials=[],
-                    trial_searches=state.get("trial_searches", 0) + 1,
-                    policy_eligible=state.get("policy_eligible", False),
-                ).dict()
+                return {
+                    "last_node": "trial_search",
+                    "trials": [],
+                    "trial_searches": state.get("trial_searches", 0) + 1,
+                    "policy_eligible": state.get("policy_eligible", False),
+                }
             
             # Search for relevant trials
             trials = self.search_relevant_trials(patient_profile)
             
-            return TrialSearchState(
-                last_node="trial_search",
-                trials=trials,
-                trial_searches=state.get("trial_searches", 0) + 1,
-                policy_eligible=state.get("policy_eligible", False),
-            ).dict()
+            return {
+                "last_node": "trial_search",
+                "trials": trials,
+                "trial_searches": state.get("trial_searches", 0) + 1,
+                "policy_eligible": state.get("policy_eligible", False),
+            }
             
         except Exception as e:
             self.logger.error(f"Error in trial search: {e}")
-            return TrialSearchState(
-                last_node="trial_search",
-                trials=[],
-                trial_searches=state.get("trial_searches", 0) + 1,
-                policy_eligible=state.get("policy_eligible", False),
-                error_message=str(e) if e else "",
-            ).dict()
+            return {
+                "last_node": "trial_search",
+                "trials": [],
+                "trial_searches": state.get("trial_searches", 0) + 1,
+                "policy_eligible": state.get("policy_eligible", False),
+                "error_message": str(e) if e else "",
+            }
 
     def grade_trials_node(self, state: AgentState) -> AgentState:
         """Run the trial-grading step of the workflow, updating the AgentState."""
@@ -483,21 +483,21 @@ class TrialService:
             
             if not trials:
                 self.logger.warning("No trials available for grading")
-                return TrialGradeState(
-                    last_node="grade_trials",
-                    relevant_trials=[],
-                    policy_eligible=state.get("policy_eligible", False),
-                    trial_found=False,
-                ).dict()
+                return {
+                    "last_node": "grade_trials",
+                    "relevant_trials": [],
+                    "policy_eligible": state.get("policy_eligible", False),
+                    "trial_found": False,
+                }
             
             if not patient_profile:
                 self.logger.warning("No patient profile available for trial grading")
-                return TrialGradeState(
-                    last_node="grade_trials",
-                    relevant_trials=[],
-                    policy_eligible=state.get("policy_eligible", False),
-                    trial_found=False,
-                ).dict()
+                return {
+                    "last_node": "grade_trials",
+                    "relevant_trials": [],
+                    "policy_eligible": state.get("policy_eligible", False),
+                    "trial_found": False,
+                }
             
             # Handle trials that might be dictionaries (from Pydantic serialization)
             # Convert back to Document objects if needed
@@ -523,22 +523,22 @@ class TrialService:
                 for trial in relevant_trials
             )
             
-            return TrialGradeState(
-                last_node="grade_trials",
-                relevant_trials=relevant_trials,
-                policy_eligible=state.get("policy_eligible", False),
-                trial_found=trial_found,
-            ).dict()
+            return {
+                "last_node": "grade_trials",
+                "relevant_trials": relevant_trials,
+                "policy_eligible": state.get("policy_eligible", False),
+                "trial_found": trial_found,
+            }
             
         except Exception as e:
             self.logger.error(f"Error in trial grading: {e}")
-            return TrialGradeState(
-                last_node="grade_trials",
-                relevant_trials=[],
-                policy_eligible=state.get("policy_eligible", False),
-                trial_found=False,
-                error_message=str(e) if e else "",
-            ).dict()
+            return {
+                "last_node": "grade_trials",
+                "relevant_trials": [],
+                "policy_eligible": state.get("policy_eligible", False),
+                "trial_found": False,
+                "error_message": str(e) if e else "",
+            }
 
 
 # Standalone functions for backward compatibility

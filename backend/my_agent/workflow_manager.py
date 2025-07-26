@@ -31,7 +31,8 @@ from .llm_manager import LLMManager
 
 # Import functions from helper_functions - these will be imported when needed to avoid circular imports
 from .State import AgentState, create_agent_state
-from .trial_service import grade_trials_node, trial_search_node
+# Remove the old trial service imports - we'll use the new TrialService class
+# from .trial_service import grade_trials_node, trial_search_node
 
 
 class WorkflowManager:
@@ -68,8 +69,10 @@ class WorkflowManager:
         # Initialize service instances - they will create their own LLM managers if needed
         from .policy_service import PolicyService
         from .patient_collector import PatientService
+        from .trial_service import TrialService
         self.policy_service = PolicyService(configs=configs)
         self.patient_service = PatientService(configs=configs)
+        self.trial_service = TrialService(configs=configs)
         
         self.graph = None
         self.memory = None
@@ -128,8 +131,8 @@ class WorkflowManager:
         builder.add_node("patient_collector", self.patient_service.patient_collector_node)
         builder.add_node("policy_search", self.policy_service.policy_search_node)
         builder.add_node("policy_evaluator", self.policy_service.policy_evaluator_node)
-        builder.add_node("trial_search", trial_search_node)
-        builder.add_node("grade_trials", grade_trials_node)
+        builder.add_node("trial_search", self.trial_service.trial_search_node)
+        builder.add_node("grade_trials", self.trial_service.grade_trials_node)
         builder.add_node("profile_rewriter", self.patient_service.profile_rewriter_node)
 
         # Add conditional edges

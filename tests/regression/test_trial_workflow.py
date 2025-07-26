@@ -12,8 +12,10 @@ import os
 import sys
 import argparse
 
-# Add the backend directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Add the project root directory to the Python path
+# The test is in tests/regression/, so we need to go up 2 levels to reach the project root
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, project_root)
 
 
 def test_trial_workflow(patient_id: int = 41):
