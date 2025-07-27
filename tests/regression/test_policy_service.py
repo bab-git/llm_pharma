@@ -43,18 +43,18 @@ def test_policy_service():
 
         # Test 2: Create PolicyService instance
         print("\n2. Testing PolicyService initialization...")
-        
+
         # Create shared dependencies for dependency injection
-        from backend.my_agent.llm_manager import LLMManager
         from backend.my_agent.database_manager import DatabaseManager
-        
+        from backend.my_agent.llm_manager import LLMManager
+
         llm_manager, llm_manager_tool = LLMManager.get_default_managers()
         db_manager = DatabaseManager()
-        
+
         policy_service = PolicyService(
             llm_manager=llm_manager,
             llm_manager_tool=llm_manager_tool,
-            db_manager=db_manager
+            db_manager=db_manager,
         )
         print("✅ PolicyService instance created with dependency injection")
         print(f"   - LLM Manager: {type(policy_service.llm_manager)}")
@@ -98,8 +98,12 @@ def test_policy_service():
             print("   ✅ Policy evaluation completed")
             print(f"      - Last node: {eval_result['last_node']}")
             print(f"      - Policy eligible: {eval_result['policy_eligible']}")
-            print(f"      - Rejection reason: {eval_result.get('rejection_reason', 'N/A')}")
-            print(f"      - Revision number: {eval_result.get('revision_number', 'N/A')}")
+            print(
+                f"      - Rejection reason: {eval_result.get('rejection_reason', 'N/A')}"
+            )
+            print(
+                f"      - Revision number: {eval_result.get('revision_number', 'N/A')}"
+            )
         else:
             print("\n   b. ⚠️ No policies found for evaluation")
 

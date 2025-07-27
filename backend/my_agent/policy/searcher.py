@@ -16,7 +16,7 @@ from backend.my_agent.database_manager import DatabaseManager
 class PolicySearcher:
     """
     Handles policy retrieval using vector search.
-    
+
     This class is responsible for finding relevant institutional policies
     based on patient profiles using semantic search.
     """
@@ -24,7 +24,7 @@ class PolicySearcher:
     def __init__(self, db_manager: DatabaseManager, logger: logging.Logger):
         """
         Initialize the PolicySearcher.
-        
+
         Args:
             db_manager: Database manager for vector store operations
             logger: Logger instance for this component
@@ -35,10 +35,10 @@ class PolicySearcher:
     def run(self, patient_profile: str) -> List[Document]:
         """
         Retrieve relevant policies based on patient profile.
-        
+
         Args:
             patient_profile: Patient profile text to search against
-            
+
         Returns:
             List of relevant policy documents
         """
@@ -55,11 +55,15 @@ class PolicySearcher:
 
             # Retrieve relevant policies
             docs_retrieved = retriever.get_relevant_documents(patient_profile)
-            self.logger.info(f"Retrieved policies to be evaluated: {len(docs_retrieved)}")
-            self.logger.info(f"✅ Retrieved {len(docs_retrieved)} relevant policy sections")
+            self.logger.info(
+                f"Retrieved policies to be evaluated: {len(docs_retrieved)}"
+            )
+            self.logger.info(
+                f"✅ Retrieved {len(docs_retrieved)} relevant policy sections"
+            )
 
             return docs_retrieved
 
         except Exception as e:
             self.logger.error(f"❌ Error in policy search: {e}")
-            return [] 
+            return []

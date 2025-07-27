@@ -18,32 +18,37 @@ def test_end_to_end_workflow():
 
     try:
         # Import all necessary components
+        from backend.my_agent.database_manager import DatabaseManager
+        from backend.my_agent.llm_manager import LLMManager
         from backend.my_agent.patient_collector import PatientService
         from backend.my_agent.policy_service import PolicyService
         from backend.my_agent.State import create_agent_state
-        from backend.my_agent.trial_service import grade_trials_node, trial_search_node
-        from backend.my_agent.llm_manager import LLMManager
-        from backend.my_agent.database_manager import DatabaseManager
+        from backend.my_agent.trial_service import TrialService
 
         print("✅ All imports successful")
 
         # Test 1: Create shared dependencies and services
         print("\n1. Testing service creation with dependency injection...")
-        
+
         # Create shared dependencies
         llm_manager, llm_manager_tool = LLMManager.get_default_managers()
         db_manager = DatabaseManager()
-        
+
         # Create service instances with injected dependencies
         policy_service = PolicyService(
             llm_manager=llm_manager,
             llm_manager_tool=llm_manager_tool,
-            db_manager=db_manager
+            db_manager=db_manager,
         )
         patient_service = PatientService(
             llm_manager=llm_manager,
             llm_manager_tool=llm_manager_tool,
-            db_manager=db_manager
+            db_manager=db_manager,
+        )
+        trial_service = TrialService(
+            llm_manager=llm_manager,
+            llm_manager_tool=llm_manager_tool,
+            db_manager=db_manager,
         )
         print("✅ Services created successfully with dependency injection")
 
@@ -80,7 +85,7 @@ def test_end_to_end_workflow():
         # Test 5: Test trial search
         print("\n5. Testing trial search...")
         state.update(policy_result)
-        trial_result = trial_search_node(state)
+        trial_result = trial_service.trial_search_node(state)
         print("✅ Trial search completed")
         print(f"   - Trials found: {len(trial_result.get('trials', []))}")
         print(f"   - Last Node: {trial_result.get('last_node', 'N/A')}")
@@ -89,7 +94,7 @@ def test_end_to_end_workflow():
         print("\n6. Testing trial grading...")
         state.update(trial_result)
         if state.get("trials"):
-            grade_result = grade_trials_node(state)
+            grade_result = trial_service.grade_trials_node(state)
             print("✅ Trial grading completed")
             print(
                 f"   - Relevant trials: {len(grade_result.get('relevant_trials', []))}"

@@ -6,7 +6,7 @@ This module contains the policy-related components for the LLM Pharma clinical t
 - PolicyEvaluator: Handles policy evaluation using LLM-based reasoning and tools
 """
 
-from .searcher import PolicySearcher
 from .evaluator import PolicyEvaluator
+from .searcher import PolicySearcher
 
-__all__ = ["PolicySearcher", "PolicyEvaluator"] 
+__all__ = ["PolicySearcher", "PolicyEvaluator"]

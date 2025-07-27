@@ -7,20 +7,21 @@ improve modularity and avoid recreating them on each function call.
 """
 
 from datetime import datetime
+
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 
 class DateInput(BaseModel):
     """Input schema for date comparison tool."""
+
     past_date: str = Field(description="A past date in YYYY-MM-DD format")
-    threshold_months: int = Field(
-        description="Number of months to compare against"
-    )
+    threshold_months: int = Field(description="Number of months to compare against")
 
 
 class NumberInput(BaseModel):
     """Input schema for number comparison tool."""
+
     num1: float = Field(description="First number")
     num2: float = Field(description="Second number")
 
@@ -38,9 +39,7 @@ def check_months_since_date(past_date: str, threshold_months: int) -> str:
         today = datetime.today().date()
         parsed_date = datetime.strptime(past_date, "%Y-%m-%d").date()
         months_diff = (
-            (today.year - parsed_date.year) * 12
-            + today.month
-            - parsed_date.month
+            (today.year - parsed_date.year) * 12 + today.month - parsed_date.month
         )
         is_within_threshold = months_diff <= threshold_months
         return f"Months since {past_date}: {months_diff}. Within {threshold_months} months: {is_within_threshold}"
@@ -56,4 +55,4 @@ def compare_numbers(num1: float, num2: float) -> str:
 
 
 # Export the tools as a list for easy import
-POLICY_TOOLS = [get_today_date, check_months_since_date, compare_numbers] 
+POLICY_TOOLS = [get_today_date, check_months_since_date, compare_numbers]

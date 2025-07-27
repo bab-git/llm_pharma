@@ -60,13 +60,14 @@ category X: [patient's disease] can be related to X due to Y."""
 
 class PatientId(BaseModel):
     """Model for extracting patient ID from user prompt."""
+
     patient_id: int
 
 
 class PatientService:
     """
     Service class for patient-related operations in the clinical trial workflow.
-    
+
     This class encapsulates all patient operations: ID extraction, data fetching,
     profile generation, and profile rewriting.
     """
@@ -80,7 +81,7 @@ class PatientService:
     ):
         """
         Initialize the PatientService.
-        
+
         Args:
             llm_manager: LLM manager for general completions
             llm_manager_tool: LLM manager for tool calls
@@ -88,50 +89,63 @@ class PatientService:
             configs: Optional Hydra config for additional configuration
         """
         self.logger = logging.getLogger(__name__)
-        
+
         # Use injected dependencies
         self.llm_manager = llm_manager
         self.llm_manager_tool = llm_manager_tool
         self.db_manager = db_manager
-        
-                # Setup chains directly in constructor
+
+        # Setup chains directly in constructor
         # Profile generation chain
         prompt_profile = PromptTemplate(
-            template=PROFILE_PROMPT,
-            input_variables=["patient_data"]
+            template=PROFILE_PROMPT, input_variables=["patient_data"]
         )
-        self.profile_chain = prompt_profile | self.llm_manager.current | StrOutputParser()
-        
+        self.profile_chain = (
+            prompt_profile | self.llm_manager.current | StrOutputParser()
+        )
+
         # Profile rewrite chain
-        prompt_rewrite = ChatPromptTemplate.from_messages([
-            ("system", PROFILE_REWRITE_PROMPT),
-            ("human", "Here is a patient data:\n\n {patient_data} \n write a patient profile.")
-        ])
-        self.profile_rewrite_chain = prompt_rewrite | self.llm_manager.current | StrOutputParser()
+        prompt_rewrite = ChatPromptTemplate.from_messages(
+            [
+                ("system", PROFILE_REWRITE_PROMPT),
+                (
+                    "human",
+                    "Here is a patient data:\n\n {patient_data} \n write a patient profile.",
+                ),
+            ]
+        )
+        self.profile_rewrite_chain = (
+            prompt_rewrite | self.llm_manager.current | StrOutputParser()
+        )
 
     def extract_patient_id(self, prompt: str) -> int:
         """
         Extract patient ID from user prompt.
-        
+
         Args:
             prompt: User prompt containing patient information
-            
+
         Returns:
             Extracted patient ID
         """
         try:
+
             def run_id_extraction():
                 current_model = self.llm_manager_tool.current
-                return current_model.with_structured_output(PatientId).invoke([
-                    SystemMessage(content=PATIENT_ID_PROMPT),
-                    HumanMessage(content=prompt)
-                ])
-            
-            response = self.llm_manager_tool.invoke_with_fallback(run_id_extraction, reset=True)
+                return current_model.with_structured_output(PatientId).invoke(
+                    [
+                        SystemMessage(content=PATIENT_ID_PROMPT),
+                        HumanMessage(content=prompt),
+                    ]
+                )
+
+            response = self.llm_manager_tool.invoke_with_fallback(
+                run_id_extraction, reset=True
+            )
             patient_id = response.patient_id
             self.logger.info(f"Extracted Patient ID: {patient_id}")
             return patient_id
-            
+
         except Exception as e:
             self.logger.error(f"Error extracting patient ID: {e}")
             raise
@@ -139,10 +153,10 @@ class PatientService:
     def fetch_patient_data(self, patient_id: int) -> Optional[Dict[str, Any]]:
         """
         Fetch patient data from database.
-        
+
         Args:
             patient_id: Patient ID to fetch
-            
+
         Returns:
             Patient data dictionary or None if not found
         """
@@ -153,14 +167,16 @@ class PatientService:
                 # Log patient details at debug level to avoid sensitive data in production logs
                 self.logger.debug(f"Patient details: {patient_data}")
                 # Log a redacted summary for info level
-                age = patient_data.get('age', 'N/A')
-                medical_history = patient_data.get('medical_history', 'N/A')
-                previous_trials = patient_data.get('previous_trials', 'N/A')
-                self.logger.info(f"Patient summary: Age {age}, Medical History: {medical_history}, Previous Trials: {previous_trials}")
+                age = patient_data.get("age", "N/A")
+                medical_history = patient_data.get("medical_history", "N/A")
+                previous_trials = patient_data.get("previous_trials", "N/A")
+                self.logger.info(
+                    f"Patient summary: Age {age}, Medical History: {medical_history}, Previous Trials: {previous_trials}"
+                )
             else:
                 self.logger.warning(f"No patient found with ID: {patient_id}")
             return patient_data
-            
+
         except Exception as e:
             self.logger.error(f"Error fetching patient data: {e}")
             return None
@@ -168,22 +184,22 @@ class PatientService:
     def build_profile(self, patient_data: Dict[str, Any]) -> str:
         """
         Build patient profile from patient data.
-        
+
         Args:
             patient_data: Patient data dictionary
-            
+
         Returns:
             Generated patient profile text
         """
         try:
             patient_profile = self.llm_manager.invoke_with_fallback(
                 lambda: self.profile_chain.invoke({"patient_data": patient_data}),
-                reset=False
+                reset=False,
             )
             self.logger.info("Generated patient profile")
             self.logger.info(f"Profile content: {patient_profile}")
             return patient_profile
-            
+
         except Exception as e:
             self.logger.error(f"Error building patient profile: {e}")
             return ""
@@ -191,22 +207,24 @@ class PatientService:
     def rewrite_profile(self, patient_data: Dict[str, Any]) -> str:
         """
         Rewrite patient profile when no trials are found.
-        
+
         Args:
             patient_data: Patient data dictionary
-            
+
         Returns:
             Rewritten patient profile text
         """
         try:
             patient_profile_rewritten = self.llm_manager.invoke_with_fallback(
-                lambda: self.profile_rewrite_chain.invoke({"patient_data": patient_data}),
-                reset=True
+                lambda: self.profile_rewrite_chain.invoke(
+                    {"patient_data": patient_data}
+                ),
+                reset=True,
             )
             self.logger.info("Rewrote patient profile")
             self.logger.info(f"Rewritten profile content: {patient_profile_rewritten}")
             return patient_profile_rewritten
-            
+
         except Exception as e:
             self.logger.error(f"Error rewriting patient profile: {e}")
             return ""
@@ -214,26 +232,26 @@ class PatientService:
     def patient_collector_node(self, state: AgentState) -> AgentState:
         """
         Patient collector node that extracts patient ID, fetches data, and generates profile.
-        
+
         Args:
             state: Current agent state containing patient prompt
-            
+
         Returns:
             Updated state with patient data and profile
         """
         try:
             # Extract patient ID
             patient_id = self.extract_patient_id(state["patient_prompt"])
-            
+
             # Fetch patient data
             patient_data = self.fetch_patient_data(patient_id)
-            
+
             # Build profile if data exists
             if patient_data is not None:
                 patient_profile = self.build_profile(patient_data)
             else:
                 patient_profile = ""
-            
+
             return {
                 "last_node": "patient_collector",
                 "patient_data": patient_data or {},
@@ -242,7 +260,7 @@ class PatientService:
                 "revision_number": state.get("revision_number", 0) + 1,
                 "policy_eligible": False,
             }
-            
+
         except Exception as e:
             self.logger.error(f"Error in patient collection: {e}")
             return {
@@ -258,10 +276,10 @@ class PatientService:
     def profile_rewriter_node(self, state: AgentState) -> AgentState:
         """
         Profile rewriter node that rewrites patient profiles when no trials are found.
-        
+
         Args:
             state: Current agent state containing patient data
-            
+
         Returns:
             Updated state with rewritten patient profile
         """
@@ -274,15 +292,15 @@ class PatientService:
                     "patient_profile": state.get("patient_profile", ""),
                     "policy_eligible": state.get("policy_eligible", False),
                 }
-            
+
             patient_profile_rewritten = self.rewrite_profile(patient_data)
-            
+
             return {
                 "last_node": "profile_rewriter",
                 "patient_profile": patient_profile_rewritten,
                 "policy_eligible": state.get("policy_eligible", False),
             }
-            
+
         except Exception as e:
             self.logger.error(f"Error in profile rewriting: {e}")
             return {

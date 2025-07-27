@@ -47,29 +47,24 @@ USAGE EXAMPLE:
 
 """
 
-import logging
 from typing import Optional
 
 from dotenv import find_dotenv, load_dotenv
 from omegaconf import DictConfig
 
-# Import logging configuration
-from .logging_config import get_logger
-
-# Import the extracted policy tools
-from .policy_tool_helpers import POLICY_TOOLS
-
 # Import required components
 from backend.my_agent.database_manager import DatabaseManager
 from backend.my_agent.llm_manager import LLMManager
-from .policy import PolicySearcher, PolicyEvaluator
 
+# Import logging configuration
+from .logging_config import get_logger
+from .policy import PolicyEvaluator, PolicySearcher
+
+# Import the extracted policy tools
+from .policy_tool_helpers import POLICY_TOOLS
 from .State import AgentState
 
 _ = load_dotenv(find_dotenv())  # read local .env file
-
-
-
 
 
 class PolicyService:
@@ -99,17 +94,16 @@ class PolicyService:
         self.llm_manager = llm_manager
         self.llm_manager_tool = llm_manager_tool
         self.db_manager = db_manager
-        
+
         # Initialize policy tools once
         self.tools = POLICY_TOOLS
         self.logger = get_logger(__name__)
-        
+
         # Initialize the searcher and evaluator components
         self.searcher = PolicySearcher(self.db_manager, self.logger)
         self.evaluator = PolicyEvaluator(
             self.llm_manager, self.llm_manager_tool, self.tools, self.logger
         )
-
 
     def policy_search_node(self, state: AgentState) -> dict:
         """
@@ -124,10 +118,10 @@ class PolicyService:
         try:
             # Get patient profile from state
             patient_profile = state.get("patient_profile", "")
-            
+
             # Use the searcher component
             docs_retrieved = self.searcher.run(patient_profile)
-            
+
             return {
                 "last_node": "policy_search",
                 "policies": docs_retrieved,
@@ -173,7 +167,9 @@ class PolicyService:
             patient_profile = state.get("patient_profile", "")
 
             # Use the evaluator component
-            is_eligible, rejection_reason, policy_qs = self.evaluator.run(patient_profile, policy_doc)
+            is_eligible, rejection_reason, policy_qs = self.evaluator.run(
+                patient_profile, policy_doc
+            )
 
             unchecked_policies.pop(0)
             self.logger.info(f"Remaining unchecked policies: {len(unchecked_policies)}")

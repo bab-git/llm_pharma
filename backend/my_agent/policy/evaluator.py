@@ -10,9 +10,9 @@ from functools import cached_property
 from typing import List, Tuple
 
 from langchain.prompts import PromptTemplate
+from langchain.schema import Document
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.prebuilt import create_react_agent
-from langchain.schema import Document
 from pydantic import BaseModel, Field
 
 from backend.my_agent.llm_manager import LLMManager
@@ -44,7 +44,7 @@ class PolicyEligibility(BaseModel):
 class PolicyEvaluator:
     """
     Handles policy evaluation using LLM-based reasoning and tools.
-    
+
     This class is responsible for evaluating patient eligibility against
     institutional policies using structured tools and ReAct agent.
     """
@@ -58,7 +58,7 @@ class PolicyEvaluator:
     ):
         """
         Initialize the PolicyEvaluator.
-        
+
         Args:
             llm_manager: LLM manager for general text generation
             llm_manager_tool: LLM manager for tool-based operations
@@ -73,18 +73,20 @@ class PolicyEvaluator:
     @cached_property
     def react_agent(self):
         """Build the ReAct agent once and cache it."""
-        return create_react_agent(self.llm_manager_tool.current, self.tools, debug=False)
-    
+        return create_react_agent(
+            self.llm_manager_tool.current, self.tools, debug=False
+        )
+
     def _invalidate_react_agent_cache(self):
         """Invalidate the cached ReAct agent when model changes."""
-        if hasattr(self, '_react_agent'):
+        if hasattr(self, "_react_agent"):
             del self._react_agent
 
     def _invoke_react_agent(self, system_message: str, user_message: str) -> str:
         """Invoke the cached ReAct agent with system and user messages."""
         # Store the current model index to detect changes
         initial_model_index = self.llm_manager_tool.current_index
-        
+
         def invoke_agent():
             # Check if model changed during fallback
             if self.llm_manager_tool.current_index != initial_model_index:
@@ -97,7 +99,7 @@ class PolicyEvaluator:
                     ]
                 }
             )
-        
+
         return self.llm_manager_tool.invoke_with_fallback(
             invoke_agent,
             reset=False,
@@ -167,7 +169,9 @@ Available tools: {tool_names}
             if isinstance(result, dict) and "messages" in result:
                 return result["messages"][-1].content
             else:
-                self.logger.warning(f"Unexpected result format from ReAct agent: {type(result)}")
+                self.logger.warning(
+                    f"Unexpected result format from ReAct agent: {type(result)}"
+                )
                 return str(result)
         except Exception as e:
             self.logger.error(f"Error in policy_tools: {e}")
@@ -185,9 +189,7 @@ Available tools: {tool_names}
             try:
                 current_model = self.llm_manager_tool.current
                 response = current_model.invoke(
-                    [
-                        {"role": "user", "content": fallback_prompt}
-                    ]
+                    [{"role": "user", "content": fallback_prompt}]
                 )
                 return response.content
             except Exception as fallback_error:
@@ -197,17 +199,19 @@ Available tools: {tool_names}
     def run(self, patient_profile: str, policy_doc: Document) -> Tuple[bool, str, str]:
         """
         Evaluate a single policy against patient profile.
-        
+
         Args:
             patient_profile: Patient profile text
             policy_doc: Policy document to evaluate
-            
+
         Returns:
             Tuple of (is_eligible, rejection_reason, policy_questions)
         """
         try:
             if not patient_profile:
-                self.logger.warning("No patient profile available for policy evaluation")
+                self.logger.warning(
+                    "No patient profile available for policy evaluation"
+                )
                 return False, "No patient profile available", ""
 
             policy_header = (
@@ -250,7 +254,11 @@ Available tools: {tool_names}
                 self.logger.error(f"Error in eligibility decision: {e}")
                 response = None
 
-            if response and hasattr(response, 'tool_calls') and len(response.tool_calls) > 0:
+            if (
+                response
+                and hasattr(response, "tool_calls")
+                and len(response.tool_calls) > 0
+            ):
                 tool_call = response.tool_calls[0]
                 if "args" in tool_call:
                     policy_eligible = tool_call["args"].get("eligibility", "no")
@@ -266,4 +274,4 @@ Available tools: {tool_names}
 
         except Exception as e:
             self.logger.error(f"❌ Error in policy evaluation: {e}")
-            return False, f"Error during evaluation: {str(e)}", "" 
+            return False, f"Error during evaluation: {str(e)}", ""
