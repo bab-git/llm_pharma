@@ -76,12 +76,9 @@ Examples:
     print("🏥 LLM Pharma - Patients Database Creator")
     print("=" * 50)
 
-    # Check if database already exists
-    if db_path.exists() and not args.force_recreate:
-        print(f"⚠️  Database already exists at: {db_path}")
-        print("Use --force-recreate to overwrite the existing database")
-        return
-
+    # Determine CSV path
+    csv_path = project_root / "data" / "patients.csv"
+    
     # Load config if available
     configs = None
     config_file = Path(args.config_path) / f"{args.config_name}.yaml"
@@ -89,19 +86,37 @@ Examples:
         configs = OmegaConf.load(str(config_file))
 
     try:
-        # Create the database
-        print(f"📊 Creating patients database at: {db_path}")
+        # Initialize database manager
         db_manager = (
             DatabaseManager(configs=configs)
             if configs is not None
             else DatabaseManager()
         )
-        df = db_manager.create_demo_patient_database(str(db_path))
+
+        # Check if database already exists
+        if db_path.exists() and not args.force_recreate:
+            print(f"⚠️  Database already exists at: {db_path}")
+            print("Use --force-recreate to overwrite the existing database")
+            return
+
+        # Check if CSV file exists, create it if it doesn't
+        if not csv_path.exists() or args.force_recreate:
+            print(f"📄 Creating patients CSV file at: {csv_path}")
+            df = db_manager.create_demo_patient_csv(str(csv_path))
+            print(f"✅ CSV file created with {len(df)} patients")
+        else:
+            print(f"📄 Using existing CSV file at: {csv_path}")
+            import pandas as pd
+            df = pd.read_csv(csv_path)
+
+        # Create the database from CSV
+        print(f"📊 Creating patients database at: {db_path}")
+        db_manager.create_sql_database_from_csv(str(csv_path), str(db_path))
 
         print("\n✅ Database creation completed successfully!")
         print(f"📁 Database location: {db_path}")
-        print(f"📁 CSV export location: {db_path.with_suffix('.csv')}")
-        print(f"👥 Total patients created: {len(df)}")
+        print(f"📁 CSV file location: {csv_path}")
+        print(f"👥 Total patients: {len(df)}")
 
         # Display sample data
         print("\n📋 Sample patient data:")

@@ -138,6 +138,220 @@ class DatabaseManager:
             return path
         return os.path.join(self.project_root, path)
 
+    def create_demo_patient_csv(
+        self, csv_path: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        Create a demo patient CSV file with randomly generated patient data.
+
+        Args:
+            csv_path: Path where the CSV file will be created. If None, uses default.
+
+        Returns:
+            pandas.DataFrame: DataFrame containing the generated patient data
+        """
+        if csv_path is None:
+            csv_path = self.default_db_path.replace(".db", ".csv").replace("sql_server", "data")
+
+        csv_path = self._get_absolute_path(csv_path)
+        self._ensure_directory(csv_path)
+
+        # Remove existing CSV if it exists
+        if os.path.exists(csv_path):
+            os.remove(csv_path)
+
+        # Define columns for the database
+        columns = [
+            "patient_id",
+            "name",
+            "age",
+            "medical_history",
+            "previous_trials",
+            "trial_status",
+            "trial_completion_date",
+        ]
+        data = []
+
+        # Given names and surnames
+        names = [
+            "John",
+            "Jane",
+            "Alice",
+            "Michael",
+            "Emily",
+            "Daniel",
+            "Sophia",
+            "James",
+            "Emma",
+            "Oliver",
+        ]
+        surnames = [
+            "Doe",
+            "Smith",
+            "Johnson",
+            "Brown",
+            "Davis",
+            "Garcia",
+            "Martinez",
+            "Anderson",
+            "Thomas",
+            "Wilson",
+        ]
+
+        # Generate all possible unique combinations of names and surnames
+        combinations = [(name, surname) for name in names for surname in surnames]
+        random.shuffle(combinations)
+        unique_names = combinations[:100]
+        full_names = [f"{name} {surname}" for name, surname in unique_names]
+
+        # Load diseases from the JSON file
+        try:
+            with open(self.default_disease_mapping_path, "r") as file:
+                trial_diseases = json.load(file)
+            list_trial_diseases = list(trial_diseases.keys())
+        except FileNotFoundError:
+            # Fallback if diseases file not found
+            list_trial_diseases = [
+                "myelomonocytic leukemia",
+                "myeloid leukemia",
+                "lymphoblastic leukemia",
+                "colorectal cancer",
+                "esophageal cancer",
+                "gastric cancer",
+            ]
+
+        other_medical_conditions = [
+            "Hypertension",
+            "Diabetes",
+            "Asthma",
+            "Heart Disease",
+            "Arthritis",
+            "Chronic Pain",
+            "Anxiety",
+            "Depression",
+            "Obesity",
+        ]
+
+        all_conditions = list(set(list_trial_diseases + other_medical_conditions))
+        trial_statuses = ["Completed", "Ongoing", "Withdrawn"]
+
+        def random_date(start, end):
+            return start + timedelta(days=random.randint(0, int((end - start).days)))
+
+        # start_date must be 2 years before now
+        start_date = datetime.now() - timedelta(days=365 * 2)
+        # end_date must be a month before now
+        end_date = datetime.now() - timedelta(days=10)
+
+        # Generate 100 patients
+        for i in range(1, 101):
+            name = random.choice(full_names)
+            age = random.randint(20, 80)
+
+            # 30% chance of having 2 or 3 diseases, 70% chance of having 1 disease
+            if random.random() < 0.3:
+                # Patient has 2 or 3 diseases
+                num_diseases = random.choice([2, 3])
+                selected_conditions = random.sample(all_conditions, num_diseases)
+                medical_history = "; ".join(selected_conditions)
+            else:
+                # Patient has 1 disease
+                medical_history = random.choice(all_conditions)
+
+            # 50% chance of having previous trials
+            if random.choice([True, False]):
+                previous_trials = f"NCT0{random.randint(1000000, 9999999)}"
+                trial_status = random.choice(trial_statuses)
+                trial_completion_date = random_date(start_date, end_date).strftime(
+                    "%Y-%m-%d"
+                )
+            else:
+                previous_trials = ""
+                trial_status = ""
+                trial_completion_date = ""
+
+            # If trial is ongoing, no completion date
+            if trial_status == "Ongoing":
+                trial_completion_date = ""
+
+            data.append(
+                (
+                    i,
+                    name,
+                    age,
+                    medical_history,
+                    previous_trials,
+                    trial_status,
+                    trial_completion_date,
+                )
+            )
+
+        # Create DataFrame
+        df = pd.DataFrame(data, columns=columns)
+
+        # Save DataFrame to CSV
+        df.to_csv(csv_path, index=False)
+
+        print(f"Demo patient CSV created at: {csv_path}")
+        print(f"Total patients created: {len(df)}")
+
+        return df
+
+    def create_sql_database_from_csv(
+        self, csv_path: Optional[str] = None, db_path: Optional[str] = None
+    ) -> None:
+        """
+        Create a SQLite database from an existing CSV file.
+
+        Args:
+            csv_path: Path to the CSV file. If None, uses default.
+            db_path: Path where the database file will be created. If None, uses default.
+        """
+        if csv_path is None:
+            csv_path = self.default_db_path.replace(".db", ".csv").replace("sql_server", "data")
+        if db_path is None:
+            db_path = self.default_db_path
+
+        csv_path = self._get_absolute_path(csv_path)
+        db_path = self._get_absolute_path(db_path)
+        self._ensure_directory(db_path)
+
+        # Remove existing database if it exists
+        if os.path.exists(db_path):
+            os.remove(db_path)
+
+        # Read CSV file
+        df = pd.read_csv(csv_path)
+
+        # Create SQLite database
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Create the patients table
+        cursor.execute(
+            """
+        CREATE TABLE IF NOT EXISTS patients (
+            patient_id INTEGER PRIMARY KEY,
+            name TEXT,
+            age INTEGER,
+            medical_history TEXT,
+            previous_trials TEXT,
+            trial_status TEXT,
+            trial_completion_date TEXT
+        )
+        """
+        )
+
+        # Insert DataFrame into SQLite table
+        df.to_sql("patients", conn, if_exists="append", index=False)
+
+        # Commit and close the connection
+        conn.commit()
+        conn.close()
+
+        print(f"SQLite database created at: {db_path}")
+        print(f"Total patients imported: {len(df)}")
+
     def create_demo_patient_database(
         self, db_path: Optional[str] = None
     ) -> pd.DataFrame:

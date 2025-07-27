@@ -35,7 +35,7 @@ directories:
   data: data
   vector_store: vector_store
   sql_server: sql_server
-  source_data: source_data
+  source_data: source_data  
 
 files:
   policy_markdown: source_data/instut_trials_policy.md

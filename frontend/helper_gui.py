@@ -237,7 +237,7 @@ Your options:
         if state_values["policies"]:
             policies = state_values["policies"]
             policies_text = "\n\n".join(
-                f"**Policy {i+1}:**\n{doc.page_content}"
+                f"Policy {i+1}:\n Title: {doc.metadata['title'][3:]}\n{doc.page_content}\n\n{'='*20}"
                 for i, doc in enumerate(policies)
             )
             return gr.update(value=policies_text)
@@ -266,18 +266,20 @@ Your options:
 
             # Get policy title/header
             policy_content = checked_policy.page_content
+            policy_title = checked_policy.metadata['title'][3:]
             policy_header = (
-                policy_content.split("\n")[0] if policy_content else "Clinical Policy"
+                # policy_content.split("\n")[0] if policy_content else "Clinical Policy"
+                policy_title if policy_title else "Clinical Policy"
             )
 
             if policy_eligible is True:
                 status_icon = "✅"
                 status_text = "PASSED"
-                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
+                policy_status = f"{status_icon} Last Clinical Policy:\n {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
             elif policy_eligible is False:
                 status_icon = "❌"
                 status_text = "FAILED"
-                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
+                policy_status = f"{status_icon} Last Clinical Policy:\n {policy_header}\nStatus: {status_text}"
 
                 if rejection_reason:
                     policy_status += f"\n\n🚨 **Rejection Reason:**\n{rejection_reason}"
@@ -495,14 +497,14 @@ Your options:
                 with gr.Column(scale=2):
                     prompt_bx = gr.Textbox(
                         label="Prompt about patient",
-                        value="Is patient_ID 51 eligible for any medical trial?",
+                        value="Is patient_ID 26 eligible for any medical trial?",
                         lines=3,
                     )
                 with gr.Column(scale=1):
                     patient_id_dropdown = gr.Dropdown(
                         choices=[f"Patient {i}" for i in range(1, 100)],
                         label="Select Patient ID",
-                        value="Patient 51",
+                        value="Patient 26",
                         interactive=True,
                     )
                 tab_notification = gr.Textbox(
@@ -685,7 +687,7 @@ Your options:
         # 3. Trials Summary Table
         with gr.Column(elem_id="trials-summary-section"):
             gr.Markdown(
-                value="""## 🎯 Trials Summary (NCT ID | Diseases | Relevance)
+                value="""## 🎯 Potential Matched Trials (NCT ID | Diseases | Relevance)
 
 You can obtain more information about each trial's details and possible relevance reasons in the **Potential Trials** and **Trials Scores** tabs."""
             )
@@ -799,7 +801,7 @@ You can obtain more information about each trial's details and possible relevanc
         if patient_selection and patient_selection.startswith("Patient "):
             patient_id = patient_selection.split(" ")[1]
             return f"Is patient_ID {patient_id} eligible for any medical trial?"
-        return "Is patient_ID 51 eligible for any medical trial?"
+        return "Is patient_ID 26 eligible for any medical trial?"
 
     def show_processing(self):
         """Show processing status"""
@@ -1092,7 +1094,7 @@ You can obtain more information about each trial's details and possible relevanc
             current_values.values[key] = new_value
         elif key == "policy_skip":
             current_values = current_states[1]
-            change_list = [("policy_eligible", True), ("rejection_reason", "N/A")]
+            change_list = [("policy_eligible", True), ("rejection_reason", "N/A"), ('checked_policy', current_states[0].values["checked_policy"])]
             current_values.values["unchecked_policies"].pop(0)
             asnode = "policy_evaluator"
         elif key == "policy_big_skip":
@@ -1156,9 +1158,9 @@ You can obtain more information about each trial's details and possible relevanc
         with gr.Blocks(
             theme=gr.themes.Default(spacing_size="sm", text_size="lg"),
             css="""
-            /* Darker background for the entire profile section */
+            /* Much lighter background for the entire profile section */
             #profile-section {
-                background-color: #2a3f54;  /* a deep slate blue */
+                background-color: #8ba3c4;  /* much lighter slate blue */
                 padding: 15px;
                 border-radius: 8px;
                 margin-bottom: 20px;
@@ -1188,14 +1190,14 @@ You can obtain more information about each trial's details and possible relevanc
             }
             /* Add a background for the Policy Conflict Resolution section */
             #policy-conflict-section {
-                background-color: #4B0000; /* very dark red */
+                background-color: #c47a7a; /* much lighter red */
                 padding: 15px;
                 border-radius: 8px;
                 margin-bottom: 20px;
             }
             /* Add a background for the Trials Summary section */
             #trials-summary-section {
-                background-color: #184d27; /* dark green */
+                background-color: #7a9c8a; /* much lighter green */
                 padding: 15px;
                 border-radius: 8px;
                 margin-bottom: 20px;
