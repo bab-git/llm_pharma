@@ -497,14 +497,14 @@ Your options:
                 with gr.Column(scale=2):
                     prompt_bx = gr.Textbox(
                         label="Prompt about patient",
-                        value="Is patient_ID 51 eligible for any medical trial?",
+                        value="Is patient_ID 26 eligible for any medical trial?",
                         lines=3,
                     )
                 with gr.Column(scale=1):
                     patient_id_dropdown = gr.Dropdown(
                         choices=[f"Patient {i}" for i in range(1, 100)],
                         label="Select Patient ID",
-                        value="Patient 51",
+                        value="Patient 26",
                         interactive=True,
                     )
                 tab_notification = gr.Textbox(
@@ -687,7 +687,7 @@ Your options:
         # 3. Trials Summary Table
         with gr.Column(elem_id="trials-summary-section"):
             gr.Markdown(
-                value="""## 🎯 Trials Summary (NCT ID | Diseases | Relevance)
+                value="""## 🎯 Potential Matched Trials (NCT ID | Diseases | Relevance)
 
 You can obtain more information about each trial's details and possible relevance reasons in the **Potential Trials** and **Trials Scores** tabs."""
             )
@@ -801,7 +801,7 @@ You can obtain more information about each trial's details and possible relevanc
         if patient_selection and patient_selection.startswith("Patient "):
             patient_id = patient_selection.split(" ")[1]
             return f"Is patient_ID {patient_id} eligible for any medical trial?"
-        return "Is patient_ID 51 eligible for any medical trial?"
+        return "Is patient_ID 26 eligible for any medical trial?"
 
     def show_processing(self):
         """Show processing status"""
@@ -1094,7 +1094,7 @@ You can obtain more information about each trial's details and possible relevanc
             current_values.values[key] = new_value
         elif key == "policy_skip":
             current_values = current_states[1]
-            change_list = [("policy_eligible", True), ("rejection_reason", "N/A")]
+            change_list = [("policy_eligible", True), ("rejection_reason", "N/A"), ('checked_policy', current_states[0].values["checked_policy"])]
             current_values.values["unchecked_policies"].pop(0)
             asnode = "policy_evaluator"
         elif key == "policy_big_skip":
