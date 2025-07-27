@@ -136,6 +136,7 @@ class LLMManager:
                 return runnable(*args, **kwargs)
             except Exception as e:
                 msg = str(e).lower()
+                logging.error(f"LLM callError: {msg}")
                 if (
                     "rate limit" in msg
                     or "rate_limit" in msg

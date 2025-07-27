@@ -79,8 +79,8 @@ class PolicyEvaluator:
 
     def _invalidate_react_agent_cache(self):
         """Invalidate the cached ReAct agent when model changes."""
-        if hasattr(self, "_react_agent"):
-            del self._react_agent
+        if hasattr(self, "react_agent"):
+            del self.react_agent
 
     def _invoke_react_agent(self, system_message: str, user_message: str) -> str:
         """Invoke the cached ReAct agent with system and user messages."""
@@ -97,7 +97,8 @@ class PolicyEvaluator:
                         {"role": "system", "content": system_message},
                         {"role": "user", "content": user_message},
                     ]
-                }
+                },
+                config={"recursion_limit": 10}
             )
 
         return self.llm_manager_tool.invoke_with_fallback(
