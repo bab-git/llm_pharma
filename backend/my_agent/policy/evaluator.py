@@ -215,8 +215,11 @@ Available tools: {tool_names}
                 return False, "No patient profile available", ""
 
             policy_header = (
-                policy_doc.page_content.split("\n", 2)[1]
-                if len(policy_doc.page_content.split("\n")) > 1
+                # policy_doc.page_content.split("\n", 2)[1]
+                # if len(policy_doc.page_content.split("\n")) > 1
+                # else "Policy"
+                policy_doc.metadata['title']
+                if len(policy_doc.metadata['title']) > 1
                 else "Policy"
             )
             self.logger.info(f"Evaluating Policy:\n {policy_header}")

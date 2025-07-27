@@ -237,7 +237,7 @@ Your options:
         if state_values["policies"]:
             policies = state_values["policies"]
             policies_text = "\n\n".join(
-                f"**Policy {i+1}:**\n{doc.page_content}"
+                f"Policy {i+1}:\n Title: {doc.metadata['title'][3:]}\n{doc.page_content}\n\n{'='*20}"
                 for i, doc in enumerate(policies)
             )
             return gr.update(value=policies_text)
@@ -266,18 +266,20 @@ Your options:
 
             # Get policy title/header
             policy_content = checked_policy.page_content
+            policy_title = checked_policy.metadata['title'][3:]
             policy_header = (
-                policy_content.split("\n")[0] if policy_content else "Clinical Policy"
+                # policy_content.split("\n")[0] if policy_content else "Clinical Policy"
+                policy_title if policy_title else "Clinical Policy"
             )
 
             if policy_eligible is True:
                 status_icon = "✅"
                 status_text = "PASSED"
-                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
+                policy_status = f"{status_icon} Last Clinical Policy:\n {policy_header}\nStatus: {status_text} \n\n ===> [Continue Evaluation]."
             elif policy_eligible is False:
                 status_icon = "❌"
                 status_text = "FAILED"
-                policy_status = f"{status_icon} Last Clinical Policy: {policy_header}\nStatus: {status_text}"
+                policy_status = f"{status_icon} Last Clinical Policy:\n {policy_header}\nStatus: {status_text}"
 
                 if rejection_reason:
                     policy_status += f"\n\n🚨 **Rejection Reason:**\n{rejection_reason}"
