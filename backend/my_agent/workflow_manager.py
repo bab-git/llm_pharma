@@ -9,7 +9,7 @@ from backend.my_agent.workflow_manager import WorkflowManager
 
 @hydra.main(version_base=None, config_path='../../config', config_name='config')
 def main(cfg: DictConfig):
-    workflow = WorkflowManager.from_config(cfg)
+    workflow = WorkflowManager(configs=cfg)
     # ... use workflow ...
 
 if __name__ == "__main__":
@@ -20,7 +20,7 @@ It handles graph creation, state management, and workflow execution.
 """
 
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph
@@ -31,7 +31,9 @@ from .llm_manager import LLMManager
 
 # Import functions from helper_functions - these will be imported when needed to avoid circular imports
 from .State import AgentState, create_agent_state
-from .trial_service import grade_trials_node, trial_search_node
+
+# Remove the old trial service imports - we'll use the new TrialService class
+# from .trial_service import grade_trials_node, trial_search_node
 
 
 class WorkflowManager:
@@ -47,40 +49,54 @@ class WorkflowManager:
 
     def __init__(
         self,
-        llm_manager: LLMManager = None,
-        llm_manager_tool: LLMManager = None,
         configs: Optional[DictConfig] = None,
     ):
         """
         Initialize the WorkflowManager.
 
         Args:
-            llm_manager: LLM manager for general completions
-            llm_manager_tool: LLM manager for tool calls
-            config: Optional Hydra config for models and paths
+            configs: Optional Hydra config for models and paths
         """
+
+        # Create shared dependencies once - single source of truth
         if configs is not None:
-            if llm_manager is None:
-                from .llm_manager import LLMManager
-
-                llm_manager = LLMManager.from_config(configs, use_tool_models=False)
-            if llm_manager_tool is None:
-                from .llm_manager import LLMManager
-
-                llm_manager_tool = LLMManager.from_config(configs, use_tool_models=True)
+            self.llm_manager = LLMManager.from_config(configs, use_tool_models=False)
+            self.llm_manager_tool = LLMManager.from_config(
+                configs, use_tool_models=True
+            )
             self.db_manager = DatabaseManager(configs=configs)
         else:
-            self.llm_manager = llm_manager
-            self.llm_manager_tool = llm_manager_tool
+            self.llm_manager, self.llm_manager_tool = LLMManager.get_default_managers()
             self.db_manager = DatabaseManager()
+
+        # Initialize service instances with injected dependencies
+        from .patient_collector import PatientService
+        from .policy_service import PolicyService
+        from .trial_service import TrialService
+
+        self.policy_service = PolicyService(
+            llm_manager=self.llm_manager,
+            llm_manager_tool=self.llm_manager_tool,
+            db_manager=self.db_manager,
+            configs=configs,
+        )
+        self.patient_service = PatientService(
+            llm_manager=self.llm_manager,
+            llm_manager_tool=self.llm_manager_tool,
+            db_manager=self.db_manager,
+            configs=configs,
+        )
+        self.trial_service = TrialService(
+            llm_manager=self.llm_manager,
+            llm_manager_tool=self.llm_manager_tool,
+            db_manager=self.db_manager,
+            configs=configs,
+        )
+
         self.graph = None
         self.memory = None
         self.app = None
         self._setup_workflow()
-
-    @classmethod
-    def from_config(cls, configs: DictConfig) -> "WorkflowManager":
-        return cls(configs=configs)
 
     def _setup_workflow(self):
         """Setup the workflow graph and memory."""
@@ -114,16 +130,9 @@ class WorkflowManager:
         import os
         import sys
 
-        from .patient_collector import (
-            AgentState,
-            patient_collector_node,
-            profile_rewriter_node,
-        )
-
         backend_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if backend_path not in sys.path:
             sys.path.append(backend_path)
-        from .policy_service import policy_evaluator_node, policy_search_node
 
         # Create the state graph
         builder = StateGraph(AgentState)
@@ -131,13 +140,15 @@ class WorkflowManager:
         # Set entry point
         builder.set_entry_point("patient_collector")
 
-        # Add nodes
-        builder.add_node("patient_collector", patient_collector_node)
-        builder.add_node("policy_search", policy_search_node)
-        builder.add_node("policy_evaluator", policy_evaluator_node)
-        builder.add_node("trial_search", trial_search_node)
-        builder.add_node("grade_trials", grade_trials_node)
-        builder.add_node("profile_rewriter", profile_rewriter_node)
+        # Add nodes - use service instance methods
+        builder.add_node(
+            "patient_collector", self.patient_service.patient_collector_node
+        )
+        builder.add_node("policy_search", self.policy_service.policy_search_node)
+        builder.add_node("policy_evaluator", self.policy_service.policy_evaluator_node)
+        builder.add_node("trial_search", self.trial_service.trial_search_node)
+        builder.add_node("grade_trials", self.trial_service.grade_trials_node)
+        builder.add_node("profile_rewriter", self.patient_service.profile_rewriter_node)
 
         # Add conditional edges
         builder.add_conditional_edges(
@@ -241,168 +252,7 @@ class WorkflowManager:
                 "trial_found": False,
             }
 
-    def get_workflow_status(self, thread_id: str) -> Dict[str, Any]:
-        """
-        Get the current status of a workflow thread.
-
-        Args:
-            thread_id: The thread ID to check
-
-        Returns:
-            Dict containing the current state
-        """
-        try:
-            # Get the current state from memory
-            current_state = self.memory.get({"configurable": {"thread_id": thread_id}})
-            return {"success": True, "state": current_state, "thread_id": thread_id}
-        except Exception as e:
-            return {"success": False, "error_message": str(e), "thread_id": thread_id}
-
-    def reset_workflow(self, thread_id: str = None) -> Dict[str, Any]:
-        """
-        Reset the workflow state for a thread.
-
-        Args:
-            thread_id: The thread ID to reset
-
-        Returns:
-            Dict containing the reset result
-        """
-        try:
-            if thread_id:
-                # Clear the thread state
-                self.memory.clear({"configurable": {"thread_id": thread_id}})
-                return {
-                    "success": True,
-                    "message": f"Workflow state reset for thread {thread_id}",
-                    "thread_id": thread_id,
-                }
-            else:
-                # Clear all states
-                self.memory.clear()
-                return {"success": True, "message": "All workflow states reset"}
-        except Exception as e:
-            return {"success": False, "error_message": str(e), "thread_id": thread_id}
-
-    def cleanup_session_state(self, session_id: str) -> Dict[str, Any]:
-        """
-        Clean up all workflow states for a specific session.
-
-        Args:
-            session_id: The session ID to clean up (will clean up all threads starting with this ID)
-
-        Returns:
-            Dict containing the cleanup result
-        """
-        try:
-            # Get all thread states
-            cleaned_count = 0
-            # all_threads = []
-
-            # Note: SqliteSaver doesn't provide a direct way to list all threads
-            # This is a limitation we'll need to work around by tracking threads in the frontend
-            # For now, we can only clear specific thread IDs if provided
-
-            return {
-                "success": True,
-                "message": f"Session cleanup requested for {session_id}",
-                "cleaned_threads": cleaned_count,
-            }
-        except Exception as e:
-            return {"success": False, "error_message": str(e), "session_id": session_id}
-
-    def get_workflow_summary(self, result: Dict[str, Any]) -> str:
-        """
-        Generate a human-readable summary of the workflow results.
-
-        Args:
-            result: The workflow result dictionary
-
-        Returns:
-            String summary of the results
-        """
-        if not result.get("success", False):
-            return f"❌ Workflow failed: {result.get('error_message', 'Unknown error')}"
-
-        summary_parts = []
-
-        # Patient information
-        patient_id = result.get("patient_id", 0)
-        summary_parts.append(f"👤 Patient ID: {patient_id}")
-
-        # Policy eligibility
-        policy_eligible = result.get("policy_eligible", False)
-        if policy_eligible:
-            summary_parts.append("✅ Patient is eligible for clinical trials")
-        else:
-            rejection_reason = result.get("rejection_reason", "No reason provided")
-            summary_parts.append(f"❌ Patient is not eligible: {rejection_reason}")
-
-        # Trial results
-        relevant_trials = result.get("relevant_trials", [])
-        trial_found = result.get("trial_found", False)
-
-        if trial_found:
-            summary_parts.append(f"🎯 Found {len(relevant_trials)} relevant trials")
-            for i, trial in enumerate(relevant_trials[:3], 1):  # Show first 3
-                nctid = trial.get("nctid", "Unknown")
-                score = trial.get("relevance_score", "Unknown")
-                summary_parts.append(f"   {i}. Trial {nctid}: {score}")
-        else:
-            summary_parts.append("🔍 No relevant trials found")
-
-        # Last node executed
-        last_node = result.get("last_node", "Unknown")
-        summary_parts.append(f"📍 Last executed: {last_node}")
-
-        return "\n".join(summary_parts)
-
-    def validate_patient_data(self, patient_id: int) -> Dict[str, Any]:
-        """
-        Validate that patient data exists in the database.
-
-        Args:
-            patient_id: The patient ID to validate
-
-        Returns:
-            Dict containing validation result
-        """
-        try:
-            patient_data = self.db_manager.get_patient_data(patient_id)
-            if patient_data:
-                return {
-                    "valid": True,
-                    "patient_data": patient_data,
-                    "message": f"Patient {patient_id} found in database",
-                }
-            else:
-                return {
-                    "valid": False,
-                    "message": f"Patient {patient_id} not found in database",
-                }
-        except Exception as e:
-            return {
-                "valid": False,
-                "error_message": str(e),
-                "message": f"Error validating patient {patient_id}",
-            }
-
-    def get_available_patients(self) -> List[int]:
-        """
-        Get list of available patient IDs in the database.
-
-        Returns:
-            List of patient IDs
-        """
-        try:
-            # This would need to be implemented in DatabaseManager
-            # For now, return a range of IDs that should exist
-            return list(range(1, 101))  # Assuming 100 demo patients
-        except Exception as e:
-            print(f"Error getting available patients: {e}")
-            return []
-
-    # MOVE THESE FROM helper_functions.py:
+    # Workflow control methods
     def _should_continue_patient(self, state: AgentState) -> str:
         """Determine if patient collection should continue."""
         if state.get("patient_data"):

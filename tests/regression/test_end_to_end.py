@@ -18,35 +18,46 @@ def test_end_to_end_workflow():
 
     try:
         # Import all necessary components
-        # from backend.my_agent.llm_manager import LLMManager
-        from backend.my_agent.patient_collector import (
-            patient_collector_node,
-        )
-        from backend.my_agent.policy_service import (
-            policy_evaluator_node,
-            policy_search_node,
-        )
+        from backend.my_agent.database_manager import DatabaseManager
+        from backend.my_agent.llm_manager import LLMManager
+        from backend.my_agent.patient_collector import PatientService
+        from backend.my_agent.policy_service import PolicyService
         from backend.my_agent.State import create_agent_state
-        from backend.my_agent.trial_service import grade_trials_node, trial_search_node
-
-        # from backend.my_agent.workflow_manager import WorkflowManager
+        from backend.my_agent.trial_service import TrialService
 
         print("✅ All imports successful")
 
-        # Test 1: Create workflow manager
-        print("\n1. Testing WorkflowManager creation...")
-        # llm_manager, llm_manager_tool = LLMManager.get_default_managers()
-        # workflow_manager = WorkflowManager(
-        #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        # )
-        print("✅ WorkflowManager created successfully")
+        # Test 1: Create shared dependencies and services
+        print("\n1. Testing service creation with dependency injection...")
+
+        # Create shared dependencies
+        llm_manager, llm_manager_tool = LLMManager.get_default_managers()
+        db_manager = DatabaseManager()
+
+        # Create service instances with injected dependencies
+        policy_service = PolicyService(
+            llm_manager=llm_manager,
+            llm_manager_tool=llm_manager_tool,
+            db_manager=db_manager,
+        )
+        patient_service = PatientService(
+            llm_manager=llm_manager,
+            llm_manager_tool=llm_manager_tool,
+            db_manager=db_manager,
+        )
+        trial_service = TrialService(
+            llm_manager=llm_manager,
+            llm_manager_tool=llm_manager_tool,
+            db_manager=db_manager,
+        )
+        print("✅ Services created successfully with dependency injection")
 
         # Test 2: Test patient collection
         print("\n2. Testing patient collection...")
         state = create_agent_state()
-        state["patient_prompt"] = "I need information about patient 1"
+        state["patient_prompt"] = "I need information about patient 41"
 
-        result = patient_collector_node(state)
+        result = patient_service.patient_collector_node(state)
         print("✅ Patient collection completed")
         print(f"   - Patient ID: {result.get('patient_id', 'N/A')}")
         print(f"   - Patient Profile: {result.get('patient_profile', 'N/A')[:100]}...")
@@ -55,7 +66,7 @@ def test_end_to_end_workflow():
         # Test 3: Test policy search
         print("\n3. Testing policy search...")
         state.update(result)
-        policy_result = policy_search_node(state)
+        policy_result = policy_service.policy_search_node(state)
         print("✅ Policy search completed")
         print(f"   - Policies found: {len(policy_result.get('policies', []))}")
         print(f"   - Last Node: {policy_result.get('last_node', 'N/A')}")
@@ -64,7 +75,7 @@ def test_end_to_end_workflow():
         print("\n4. Testing policy evaluation...")
         state.update(policy_result)
         if state.get("unchecked_policies"):
-            eval_result = policy_evaluator_node(state)
+            eval_result = policy_service.policy_evaluator_node(state)
             print("✅ Policy evaluation completed")
             print(f"   - Policy Eligible: {eval_result.get('policy_eligible', 'N/A')}")
             print(f"   - Last Node: {eval_result.get('last_node', 'N/A')}")
@@ -74,7 +85,7 @@ def test_end_to_end_workflow():
         # Test 5: Test trial search
         print("\n5. Testing trial search...")
         state.update(policy_result)
-        trial_result = trial_search_node(state)
+        trial_result = trial_service.trial_search_node(state)
         print("✅ Trial search completed")
         print(f"   - Trials found: {len(trial_result.get('trials', []))}")
         print(f"   - Last Node: {trial_result.get('last_node', 'N/A')}")
@@ -83,7 +94,7 @@ def test_end_to_end_workflow():
         print("\n6. Testing trial grading...")
         state.update(trial_result)
         if state.get("trials"):
-            grade_result = grade_trials_node(state)
+            grade_result = trial_service.grade_trials_node(state)
             print("✅ Trial grading completed")
             print(
                 f"   - Relevant trials: {len(grade_result.get('relevant_trials', []))}"
@@ -120,24 +131,19 @@ def test_workflow_manager_integration():
     print("=" * 60)
 
     try:
-        from backend.my_agent.llm_manager import LLMManager
         from backend.my_agent.workflow_manager import WorkflowManager
 
         # Create workflow manager
-        llm_manager, llm_manager_tool = LLMManager.get_default_managers()
-        workflow_manager = WorkflowManager(
-            llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        )
+        workflow_manager = WorkflowManager()
 
         # Test workflow execution
         patient_prompt = "I need information about patient 1"
         result = workflow_manager.run_workflow(patient_prompt)
 
         print("✅ WorkflowManager integration test successful")
-        print(f"   - Workflow completed: {result.get('completed', False)}")
-        print(
-            f"   - Final state: {result.get('final_state', {}).get('last_node', 'N/A')}"
-        )
+        print(f"   - Success: {result.get('success', False)}")
+        print(f"   - Patient ID: {result.get('patient_id', 'N/A')}")
+        print(f"   - Last Node: {result.get('last_node', 'N/A')}")
 
         return True
 

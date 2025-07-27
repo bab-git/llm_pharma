@@ -1,11 +1,31 @@
+# === Environment and Virtual Envs ===
 .env
 .*env*/
-temp/
+
+# === Python Cache and Build Artifacts ===
+__pycache__/
 __pycache*
+*.pyc
+*.pyo
+
+# === Data and Output Directories ===
 data/
-chromadb/
-chroma_db/
 outputs/
+temp/
+
+# === Database Files ===
 *.sqlite*
 *.db
+chromadb/
+chroma_db/
 vector_stor*/
+
+# === Logs and Debug Files ===
+logs/
+TODO*
+*.log
+
+# === Miscellaneous Files ===
+*.json
+.DS_Store
+*DS_Store

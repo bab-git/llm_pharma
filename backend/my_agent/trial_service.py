@@ -1,14 +1,17 @@
 """
 Trial Service Module
 
-Owns everything about matching a patient profile to trials and scoring relevance.
-No leakage of DB or policy details.
+This module handles trial matching and relevance scoring for the LLM Pharma clinical trial workflow system.
 """
 
-from typing import Optional
+import logging
+from enum import Enum
+from threading import Lock
+from typing import Any, Dict, List, Optional
 
 from langchain.chains.query_constructor.base import AttributeInfo
 from langchain.retrievers.self_query.base import SelfQueryRetriever
+from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from omegaconf import DictConfig
@@ -19,38 +22,26 @@ from .llm_manager import LLMManager
 from .State import AgentState
 
 
-def safe_invoke(retriever, question, retries=2):
-    for i in range(retries):
-        try:
-            return retriever.invoke(question)
-        except ValueError:
-            print(f"⚠️ JSON parse failed (attempt {i+1}), retrying…")
-    raise RuntimeError("Failed to parse JSON after retries")
+class Relevance(str, Enum):
+    """Enum for trial relevance scores."""
+
+    YES = "yes"
+    NO = "no"
 
 
-# --- Structured Output Schemas ---
-class grade(BaseModel):
+class TrialGrade(BaseModel):
     """The result of the trial's relevance check as relevance score and explanation."""
 
     relevance_score: str = Field(description="Relevance score: 'Yes' or 'No'")
     explanation: str = Field(description="Reasons to the given relevance score.")
     further_information: Optional[str] = Field(
-        default="Not applicable",
+        default=None,
         description="Additional information needed from patient's medical history",
     )
 
-    # class Config:
-    #     json_schema_extra = {
-    #         "example": {
-    #             "relevance_score": "Yes",
-    #             "explanation": "The patient has the target disease condition for this trial.",
-    #             "further_information": "Need to verify patient's current treatment status.",
-    #         }
-    #     }
-
 
 class GradeHallucinations(BaseModel):
-    """Binary score and explanation for whether the LLM's generated answer is grounded in / supported by the facts in the patient's medical profile."""
+    """Binary score and explanation for whether the LLM's generated answer is grounded in the patient's medical profile."""
 
     binary_score: str = Field(
         description="Answer is grounded in the patient's medical profile, 'yes' or 'no'"
@@ -58,38 +49,123 @@ class GradeHallucinations(BaseModel):
     reason: str = Field(description="Reasons to the given relevance score.")
 
 
-# --- Helper to get default LLMManagers ---
-def get_default_llm_managers():
-    return LLMManager.get_default_managers()
+class TrialService:
+    """
+    Service class for trial-related operations in the clinical trial workflow.
 
+    This class encapsulates all trial operations: search, retrieval, grading, and hallucination checking.
+    """
 
-# --- Trial Search Node ---
-def trial_search_node(state: AgentState, configs: Optional[DictConfig] = None) -> dict:
-    try:
-        if configs is not None:
-            llm_manager, llm_manager_tool = get_default_llm_managers()
-            # collector_config = PatientCollectorConfig.from_config(configs)
-            db_manager = DatabaseManager(configs=configs)
-        else:
-            llm_manager, llm_manager_tool = get_default_llm_managers()
-            # collector_config = PatientCollectorConfig(
-            #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-            # )
-            db_manager = DatabaseManager()
-        patient_profile = state.get("patient_profile", "")
-        if not patient_profile:
-            print("⚠️ No patient profile available for trial search")
-            return {
-                "last_node": "trial_search",
-                "trials": [],
-                "trial_searches": state.get("trial_searches", 0) + 1,
-                "policy_eligible": state.get("policy_eligible", False),
-            }
-        trial_vectorstore = db_manager.create_trial_vectorstore()
-        print(
-            f"Number of trials in the vector store: {trial_vectorstore._collection.count()}"
+    def __init__(
+        self,
+        llm_manager: LLMManager,
+        llm_manager_tool: LLMManager,
+        db_manager: DatabaseManager,
+        configs: Optional[DictConfig] = None,
+    ):
+        """
+        Initialize the TrialService.
+
+        Args:
+            llm_manager: LLM manager for general completions
+            llm_manager_tool: LLM manager for tool calls
+            db_manager: Database manager for trial data operations
+            configs: Optional Hydra config for additional configuration
+        """
+        self.logger = logging.getLogger(__name__)
+
+        # Use injected dependencies
+        self.llm_manager = llm_manager
+        self.llm_manager_tool = llm_manager_tool
+        self.db_manager = db_manager
+
+        # Cache heavy objects with thread safety
+        self._vectorstore = None
+        self._retriever = None
+        self._vs_lock = Lock()
+        self._retriever_lock = Lock()
+
+        # Setup prompts and chains once
+        self._setup_prompts()
+        self._setup_metadata()
+
+    def _setup_prompts(self):
+        """Setup prompt templates for trial grading and hallucination checking."""
+        # Trial grading prompt
+        self.trial_grade_prompt = PromptTemplate(
+            template="""
+            You are a Principal Investigator (PI) evaluating the relevance of clinical trials to patients' medical profiles.
+
+            Your task is to determine if a clinical trial is relevant for a patient based on the trial's inclusion and exclusion criteria.
+
+            Clinical trial diseases: {trial_diseases}
+
+            Trial Criteria:
+            {document}
+
+            ==============
+
+            Steps for determining relevance:
+
+            1. Review exclusion criteria first. If the patient meets any critical exclusion criteria that clearly disqualify them from participation, relevance_score = 'No'.
+
+            2. Evaluate inclusion criteria:
+            - If the patient's condition matches or closely relates to the trial's target diseases, relevance_score = 'Yes', even if minor clarifications are needed.
+            - If the patient's condition does not relate to trial diseases, relevance_score = 'No'.
+
+            3. If the patient partially meets inclusion criteria but the information provided is insufficient, provide relevance_score = 'Yes', and clearly specify in further_information what additional details would clarify eligibility.
+
+            ==============
+
+            Example 1:
+            Patient: Has arthritis.
+            Trial: Related to pancreatic cancer.
+            Result: relevance_score = 'No'.
+
+            Example 2:
+            Patient: Has generalized anxiety disorder.
+            Trial: Related to generalized anxiety disorder, but requires a specific anxiety scale score that isn't provided.
+            Result: relevance_score = 'Yes' (Further info needed: Patient's Hamilton Anxiety Scale score).
+
+            Example 3:
+            Patient: Has generalized anxiety disorder and other unrelated minor conditions.
+            Trial: Related to generalized anxiety disorder.
+            Result: relevance_score = 'Yes' (Assuming no critical exclusions apply).
+
+            ==============
+
+            Patient Medical Profile:
+            {patient_profile}
+
+            Respond with:
+            - relevance_score: "Yes" or "No"
+            - explanation: Brief, factual reasoning
+            - further_information: Specify clearly if additional details from patient's medical history are needed to confirm eligibility
+            """,
+            input_variables=["document", "patient_profile", "trial_diseases"],
         )
-        metadata_field_info = [
+
+        # Hallucination checking prompt
+        self.hallucination_prompt = PromptTemplate(
+            template="""
+            You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile.
+            Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile.
+            ===============
+            Here is the patient's medical profile: {patient_profile}
+
+            ===============
+            Here is the LLM generated answer: {explanation}
+
+            Respond with:
+            - binary_score: "yes" or "no"
+            - reason: Your reasoning
+            """,
+            input_variables=["patient_profile", "explanation"],
+        )
+
+    def _setup_metadata(self):
+        """Setup metadata field information for trial retrieval."""
+        self.metadata_field_info = [
             AttributeInfo(
                 name="disease_category",
                 description="Defines the disease group of patients related to this trial. One of ['cancer', 'leukemia', 'mental_health']",
@@ -101,230 +177,395 @@ def trial_search_node(state: AgentState, configs: Optional[DictConfig] = None) -
                 type="str",
             ),
         ]
-        document_content_description = (
+        self.document_content_description = (
             "The list of patient conditions to include or exclude them from the trial"
         )
-        print(f"patient_profile: {patient_profile}")
-        question = f"""
-        Which trials are relevant to the patient with the following medical history?\n
-        patient_profile: {patient_profile}
+
+    @property
+    def vectorstore(self):
+        """Lazy load and cache the trial vectorstore."""
+        with self._vs_lock:
+            if self._vectorstore is None:
+                self.logger.info("Creating trial vectorstore...")
+                self._vectorstore = self.db_manager.create_trial_vectorstore()
+                self.logger.info(
+                    f"Trial vectorstore created with {self._vectorstore._collection.count()} trials"
+                )
+            return self._vectorstore
+
+    @property
+    def retriever(self):
+        """Lazy load and cache the self-query retriever."""
+        with self._retriever_lock:
+            if self._retriever is None:
+                self.logger.info("Creating self-query retriever...")
+                self._retriever = SelfQueryRetriever.from_llm(
+                    self.llm_manager.current,
+                    self.vectorstore,
+                    self.document_content_description,
+                    self.metadata_field_info,
+                )
+                self.logger.info("Self-query retriever created")
+            return self._retriever
+
+    def retry_invoke_json(
+        self, retriever, question: str, retries: int = 2
+    ) -> List[Document]:
         """
+        Retry JSON parsing for retriever invocations.
 
-        def run_trial_retrieval():
-            current_model = llm_manager.current
-            retriever_trial_sq = SelfQueryRetriever.from_llm(
-                current_model,
-                trial_vectorstore,
-                document_content_description,
-                metadata_field_info,
+        Args:
+            retriever: The retriever to invoke
+            question: The question to ask
+            retries: Number of retry attempts
+
+        Returns:
+            Retrieved documents
+
+        Raises:
+            RuntimeError: If all retries fail
+        """
+        for i in range(retries):
+            try:
+                return retriever.invoke(question)
+            except ValueError as e:
+                self.logger.warning(
+                    f"JSON parse failed (attempt {i+1}), retrying... Error: {e}"
+                )
+        raise RuntimeError("Failed to parse JSON after retries")
+
+    def _invoke_retrieval(self, question: str) -> List[Document]:
+        """Invoke the retriever with the given question."""
+        return self.retry_invoke_json(self.retriever, question)
+
+    def search_relevant_trials(self, patient_profile: str) -> List[Document]:
+        """
+        Search for relevant trials based on patient profile.
+
+        Args:
+            patient_profile: Patient's medical profile
+
+        Returns:
+            List of relevant trial documents
+        """
+        try:
+            question = f"""
+            Which trials are relevant to the patient with the following medical history?
+            patient_profile: {patient_profile}
+            """
+
+            docs_retrieved = self.llm_manager.invoke_with_fallback(
+                lambda: self._invoke_retrieval(question), reset=True
             )
-            return safe_invoke(retriever_trial_sq, question)
 
-        docs_retrieved = llm_manager.invoke_with_fallback(
-            run_trial_retrieval, reset=True
+            self.logger.info(f"Retrieved {len(docs_retrieved)} relevant trials")
+            return docs_retrieved
+
+        except Exception as e:
+            self.logger.error(f"Error in trial search: {e}")
+            return []
+
+    def _invoke_trial_score(
+        self, patient_profile: str, doc_txt: str, trial_diseases: str
+    ) -> TrialGrade:
+        """Invoke the trial scoring chain."""
+        current_model = self.llm_manager_tool.current
+        llm_with_tool = current_model.with_structured_output(TrialGrade)
+        retrieval_grader = self.trial_grade_prompt | llm_with_tool
+        return retrieval_grader.invoke(
+            {
+                "patient_profile": patient_profile,
+                "document": doc_txt,
+                "trial_diseases": trial_diseases,
+            }
         )
-        print(f"✅ Retrieved {len(docs_retrieved)} relevant trials")
-        trial_searches = state.get("trial_searches", 0) + 1
-        return {
-            "last_node": "trial_search",
-            "trials": docs_retrieved,
-            "trial_searches": trial_searches,
-            "policy_eligible": state.get("policy_eligible", False),
-        }
-    except Exception as e:
-        print(f"❌ Error in trial search: {e}")
-        return {
-            "last_node": "trial_search",
-            "trials": [],
-            "trial_searches": state.get("trial_searches", 0) + 1,
-            "policy_eligible": state.get("policy_eligible", False),
-            "error_message": str(e) if e else "",
-        }
 
+    def _score_trial(self, trial_doc: Document, patient_profile: str) -> TrialGrade:
+        """
+        Score a single trial for relevance to patient profile.
 
-# --- Grade Trials Node ---
-def grade_trials_node(state: AgentState) -> dict:
-    try:
-        print("----- CHECKING THE TRIALS RELEVANCE TO PATIENT PROFILE ----- ")
-        trial_found = False
-        trials = state.get("trials", [])
-        patient_profile = state.get("patient_profile", "")
-        if not trials:
-            print("⚠️ No trials available for grading")
-            return {
-                "last_node": "grade_trials",
-                "relevant_trials": [],
-                "policy_eligible": state.get("policy_eligible", False),
-            }
-        if not patient_profile:
-            print("⚠️ No patient profile available for trial grading")
-            return {
-                "last_node": "grade_trials",
-                "relevant_trials": [],
-                "policy_eligible": state.get("policy_eligible", False),
-            }
-        llm_manager, llm_manager_tool = get_default_llm_managers()
-        # config = PatientCollectorConfig(
-        #     llm_manager=llm_manager, llm_manager_tool=llm_manager_tool
-        # )
-        relevant_trials = []
-        for trial in trials:
-            doc_txt = trial.page_content
-            trial_diseases = trial.metadata["diseases"]
-            nctid = trial.metadata["nctid"]
-            print(f"---GRADER: TRIAL {nctid}: ---")
+        Args:
+            trial_doc: Trial document
+            patient_profile: Patient's medical profile
 
-            def run_trial_score():
-                current_model = llm_manager_tool.current
-                prompt_grader = PromptTemplate(
-                    template="""
-                    You are a Principal Investigator (PI) for evaluating patients for clinical trials.\n
-                    Your task is to evaluate the relevance of a clinical trial to the given patient's medical profile. \n
-                    The clinical trial is related to these diseases: {trial_diseases} \n
-                    Here are the inclusion and exclusion criteria of the trial: \n\n {document} \n\n
-                    ===============
-                    Use the following steps to determine relevance and provide the necessary fields in your response: \n
-                    1- If the patient's profile meets any exclusion criteria, then the trial is not relevant --> relevance_score = 'No'. \n
-                    2- If the patient has or had the trial's inclusion diseases, then it is relevant --> relevance_score = 'Yes'.\n
-                    3- If the patient did not have the trial's inclusion diseases, then it is not relevant --> relevance_score = 'No'.\n
-                    Example 1:
-            The patient has Arthritis and the trial is related to pancreatic cancer. --> relevance_score = 'No' \n
-                    Example 2:
-            The patient has pancreatic cancer and the trial is also related to carcinoma pancreatic cancer. --> relevance_score = 'Yes' \n
-                    Example 3:
-            The patient has pancreatic cancer and the trial is related to breast cancer or ovarian cancer. --> relevance_score = 'No'. \n
-                    Bring your justification in the explanation. \n
-                    Mention further information that is needed from the patient's medical history related to the trial's criteria \n
-                    ===============
-                    Here is the patient's medical profile: {patient_profile} \n\n
+        Returns:
+            TrialGrade with relevance score and explanation
+        """
+        try:
+            doc_txt = trial_doc.page_content
+            trial_diseases = trial_doc.metadata["diseases"]
+            nctid = trial_doc.metadata["nctid"]
 
-                    Respond with:
-                    - relevance_score: "Yes" or "No"
-                    - explanation: Your reasoning
-                    - further_information: What additional info is needed
-                    """,
-                    input_variables=["document", "patient_profile", "trial_diseases"],
-                )
-                try:
-                    llm_with_tool = current_model.with_structured_output(grade)
-                    retrieval_grader = prompt_grader | llm_with_tool
-                    result = retrieval_grader.invoke(
-                        {
-                            "patient_profile": patient_profile,
-                            "document": doc_txt,
-                            "trial_diseases": trial_diseases,
-                        }
-                    )
-                    # print(f"Grade result: {result}")
-                    return result
-                except Exception as e:
-                    print(f"Structured output failed, using fallback: {e}")
-                    text_response = (
-                        prompt_grader | current_model | StrOutputParser()
-                    ).invoke(
-                        {
-                            "patient_profile": patient_profile,
-                            "document": doc_txt,
-                            "trial_diseases": trial_diseases,
-                        }
-                    )
-                    relevance = "No"  # Default to No for safety
-                    if (
-                        "yes" in text_response.lower()
-                        and "relevance" in text_response.lower()
-                    ):
-                        relevance = "Yes"
-                    return grade(
-                        relevance_score=relevance,
-                        explanation=text_response[:500],
-                        further_information="Additional patient history review needed",
-                    )
+            self.logger.info(f"Scoring trial {nctid} for diseases: {trial_diseases}")
 
-            trial_score = llm_manager_tool.invoke_with_fallback(
-                run_trial_score, reset=False
+            result = self.llm_manager_tool.invoke_with_fallback(
+                lambda: self._invoke_trial_score(
+                    patient_profile, doc_txt, trial_diseases
+                ),
+                reset=False,
             )
-            relevance_score = trial_score.relevance_score
-            trial_score_dic = dict(trial_score)
-            trial_score_dic["nctid"] = nctid
-            if relevance_score.lower() == "yes":
-                explanation = trial_score.explanation
 
-                def run_hallucination():
-                    current_model = llm_manager_tool.current
-                    prompt_hallucination = PromptTemplate(
-                        template="""
-                        You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
-                        Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile.
-                        ===============
-                        Here is the patient's medical profile: {patient_profile} \n\n
-                        ===============
-                        Here is the LLM generated answer: {explanation} \n\n
-                                                
-                        Respond with:
-                        - binary_score: "yes" or "no"
-                        - reason: Your reasoning
-                        """,
-                        input_variables=["patient_profile", "explanation"],
-                    )
+            # Log detailed scoring results
+            relevance_score = result.relevance_score
+            explanation = result.explanation
+            further_info = result.further_information
 
-                    # system = """You are a grader assessing whether an LLM generation is grounded in / supported by the facts in the patient's medical profile. \n
-                    #      Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the facts in the patient's medical profile."""
-                    # hallucination_prompt = ChatPromptTemplate.from_messages(
-                    #     [
-                    #         ("system", system),
-                    #         (
-                    #             "human",
-                    #             "Patient's medical profile: \n\n {patient_profile} \n\n LLM generated answer: {explanation}",
-                    #         ),
-                    #     ]
-                    # )
-
-                    llm_with_tool_hallucination = current_model.with_structured_output(
-                        GradeHallucinations
-                    )
-                    # hallucination_grader = hallucination_prompt | llm_with_tool_hallucination
-                    hallucination_grader = (
-                        prompt_hallucination | llm_with_tool_hallucination
-                    )
-
-                    result = hallucination_grader.invoke(
-                        {
-                            "patient_profile": patient_profile,
-                            "explanation": explanation,
-                        }
-                    )
-                    return result
-
-                factual_score = llm_manager_tool.invoke_with_fallback(
-                    run_hallucination, reset=False
-                )
-                factual_score_grade = factual_score.binary_score
-                if factual_score_grade == "no":
-                    print(
-                        "--- HALLUCINATION: MODEL'S EXPLANATION IS NOT GROUNDED IN PATIENT PROFILE --> REJECTED---"
-                    )
-                    trial_score_dic["relevance_score"] = "no"
-                    trial_score_dic["explanation"] = "Agent's Hallucination"
-            if (
-                relevance_score.lower() == "yes"
-                and trial_score_dic.get("relevance_score", "").lower() == "yes"
-            ):
-                print("---TRIAL RELEVANT---")
-                trial_found = True
+            if relevance_score.lower() == Relevance.YES:
+                self.logger.info(f"Trial {nctid} ACCEPTED - Diseases: {trial_diseases}")
+                self.logger.info(f"  Reason: {explanation}")
+                if further_info:
+                    self.logger.info(f"  Additional info needed: {further_info}")
             else:
-                print("--- TRIAL NOT RELEVANT---")
-            relevant_trials.append(trial_score_dic)
-        return {
-            "last_node": "grade_trials",
-            "relevant_trials": relevant_trials,
-            "policy_eligible": state.get("policy_eligible", False),
-            "trial_found": trial_found,
-        }
-    except Exception as e:
-        print(f"❌ Error in trial grading: {e}")
-        return {
-            "last_node": "grade_trials",
-            "relevant_trials": [],
-            "policy_eligible": state.get("policy_eligible", False),
-            "error_message": str(e) if e else "",
-        }
+                self.logger.info(f"Trial {nctid} REJECTED - Diseases: {trial_diseases}")
+                self.logger.info(f"  Reason: {explanation}")
+                if further_info:
+                    self.logger.info(f"  Additional info needed: {further_info}")
+
+            return result
+
+        except Exception as e:
+            self.logger.warning(
+                f"Structured output failed for trial {trial_doc.metadata.get('nctid', 'Unknown')}, using fallback: {e}"
+            )
+            # Fallback to text-based scoring
+            text_response = (
+                self.trial_grade_prompt
+                | self.llm_manager_tool.current
+                | StrOutputParser()
+            ).invoke(
+                {
+                    "patient_profile": patient_profile,
+                    "document": doc_txt,
+                    "trial_diseases": trial_diseases,
+                }
+            )
+
+            # Default to No for safety
+            relevance = Relevance.NO
+            if "yes" in text_response.lower() and "relevance" in text_response.lower():
+                relevance = Relevance.YES
+
+            self.logger.warning(
+                f"Fallback scoring for trial {trial_doc.metadata.get('nctid', 'Unknown')}: {relevance.value.upper()}"
+            )
+            self.logger.warning(f"  Fallback explanation: {text_response[:200]}...")
+
+            return TrialGrade(
+                relevance_score=relevance.value.title(),
+                explanation=text_response[:500],
+                further_information="Additional patient history review needed",
+            )
+
+    def _invoke_hallucination_check(
+        self, patient_profile: str, explanation: str
+    ) -> GradeHallucinations:
+        """Invoke the hallucination checking chain."""
+        current_model = self.llm_manager_tool.current
+        llm_with_tool = current_model.with_structured_output(GradeHallucinations)
+        hallucination_grader = self.hallucination_prompt | llm_with_tool
+        return hallucination_grader.invoke(
+            {
+                "patient_profile": patient_profile,
+                "explanation": explanation,
+            }
+        )
+
+    def _hallucination_guard(
+        self, explanation: str, patient_profile: str, trial_nctid: str = "Unknown"
+    ) -> bool:
+        """
+        Check if the explanation is grounded in the patient profile.
+
+        Args:
+            explanation: The explanation to check
+            patient_profile: Patient's medical profile
+            trial_nctid: Trial NCT ID for logging context
+
+        Returns:
+            True if explanation is grounded, False if hallucination detected
+        """
+        try:
+            self.logger.info(f"Checking hallucination for trial {trial_nctid}")
+
+            result = self.llm_manager_tool.invoke_with_fallback(
+                lambda: self._invoke_hallucination_check(patient_profile, explanation),
+                reset=False,
+            )
+
+            # Log detailed hallucination check results
+            binary_score = result.binary_score
+            reason = result.reason
+
+            if binary_score.lower() == Relevance.YES:
+                self.logger.info(f"Trial {trial_nctid} - Hallucination check PASSED")
+                self.logger.info(f"  Grounding reason: {reason}")
+            else:
+                self.logger.warning(f"Trial {trial_nctid} - Hallucination check FAILED")
+                self.logger.warning(f"  Hallucination reason: {reason}")
+                self.logger.warning(
+                    f"  Explanation being checked: {explanation[:200]}..."
+                )
+
+            return binary_score.lower() == Relevance.YES
+
+        except Exception as e:
+            self.logger.error(
+                f"Error in hallucination check for trial {trial_nctid}: {e}"
+            )
+            # Default to allowing the explanation if hallucination check fails
+            return True
+
+    def grade_trials(
+        self, trials: List[Document], patient_profile: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Grade multiple trials for relevance to patient profile.
+
+        Args:
+            trials: List of trial documents
+            patient_profile: Patient's medical profile
+
+        Returns:
+            List of graded trial results
+        """
+        relevant_trials = []
+
+        for trial in trials:
+            nctid = trial.metadata["nctid"]
+            self.logger.info(f"Grading trial {nctid}")
+
+            # Score the trial
+            trial_score = self._score_trial(trial, patient_profile)
+            trial_score_dict = dict(trial_score)
+            trial_score_dict["nctid"] = nctid
+
+            # Check for hallucination if trial is relevant
+            if trial_score.relevance_score.lower() == Relevance.YES:
+                if not self._hallucination_guard(
+                    trial_score.explanation, patient_profile, nctid
+                ):
+                    self.logger.warning(
+                        f"Hallucination detected in trial {nctid} - rejecting"
+                    )
+                    trial_score_dict["relevance_score"] = Relevance.NO
+                    trial_score_dict["explanation"] = "Agent's Hallucination"
+                else:
+                    self.logger.info(f"Trial {nctid} is relevant")
+            else:
+                self.logger.info(f"Trial {nctid} is not relevant")
+
+            relevant_trials.append(trial_score_dict)
+
+        return relevant_trials
+
+    def trial_search_node(self, state: AgentState) -> AgentState:
+        """Run the trial-search step of the workflow, updating the AgentState."""
+        try:
+            patient_profile = state.get("patient_profile", "")
+            if not patient_profile:
+                self.logger.warning("No patient profile available for trial search")
+                return {
+                    "last_node": "trial_search",
+                    "trials": [],
+                    "trial_searches": state.get("trial_searches", 0) + 1,
+                    "policy_eligible": state.get("policy_eligible", False),
+                }
+
+            # Search for relevant trials
+            trials = self.search_relevant_trials(patient_profile)
+
+            return {
+                "last_node": "trial_search",
+                "trials": trials,
+                "trial_searches": state.get("trial_searches", 0) + 1,
+                "policy_eligible": state.get("policy_eligible", False),
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error in trial search: {e}")
+            return {
+                "last_node": "trial_search",
+                "trials": [],
+                "trial_searches": state.get("trial_searches", 0) + 1,
+                "policy_eligible": state.get("policy_eligible", False),
+                "error_message": str(e) if e else "",
+            }
+
+    def grade_trials_node(self, state: AgentState) -> AgentState:
+        """Run the trial-grading step of the workflow, updating the AgentState."""
+        try:
+            self.logger.info("Checking trials relevance to patient profile")
+
+            trials = state.get("trials", [])
+            patient_profile = state.get("patient_profile", "")
+
+            if not trials:
+                self.logger.warning("No trials available for grading")
+                return {
+                    "last_node": "grade_trials",
+                    "relevant_trials": [],
+                    "policy_eligible": state.get("policy_eligible", False),
+                    "trial_found": False,
+                }
+
+            if not patient_profile:
+                self.logger.warning("No patient profile available for trial grading")
+                return {
+                    "last_node": "grade_trials",
+                    "relevant_trials": [],
+                    "policy_eligible": state.get("policy_eligible", False),
+                    "trial_found": False,
+                }
+
+            # Handle trials that might be dictionaries (from Pydantic serialization)
+            # Convert back to Document objects if needed
+            from langchain_core.documents import Document
+
+            processed_trials = []
+            for trial in trials:
+                if isinstance(trial, dict):
+                    # Convert dict back to Document
+                    processed_trials.append(
+                        Document(
+                            page_content=trial.get("page_content", ""),
+                            metadata=trial.get("metadata", {}),
+                        )
+                    )
+                else:
+                    # Already a Document object
+                    processed_trials.append(trial)
+
+            # Grade all trials
+            relevant_trials = self.grade_trials(processed_trials, patient_profile)
+
+            # Check if any trials were found relevant
+            trial_found = any(
+                trial.get("relevance_score", "").lower() == Relevance.YES
+                for trial in relevant_trials
+            )
+
+            return {
+                "last_node": "grade_trials",
+                "relevant_trials": relevant_trials,
+                "policy_eligible": state.get("policy_eligible", False),
+                "trial_found": trial_found,
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error in trial grading: {e}")
+            return {
+                "last_node": "grade_trials",
+                "relevant_trials": [],
+                "policy_eligible": state.get("policy_eligible", False),
+                "trial_found": False,
+                "error_message": str(e) if e else "",
+            }
+
+
+# Public API
+__all__ = [
+    "TrialService",
+    "TrialGrade",
+    "GradeHallucinations",
+    "Relevance",
+]

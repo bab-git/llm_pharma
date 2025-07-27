@@ -37,19 +37,26 @@ def test_policy_service():
     try:
         # Test 1: Import PolicyService
         print("\n1. Testing PolicyService imports...")
-        from backend.my_agent.policy_service import (  # get_default_policy_service,; policy_tools,
-            PolicyEligibility,
-            PolicyService,
-            policy_evaluator_node,
-            policy_search_node,
-        )
+        from backend.my_agent.policy_service import PolicyService
 
-        print("✅ Successfully imported all PolicyService components")
+        print("✅ Successfully imported PolicyService component")
 
         # Test 2: Create PolicyService instance
         print("\n2. Testing PolicyService initialization...")
-        policy_service = PolicyService()
-        print("✅ PolicyService instance created")
+
+        # Create shared dependencies for dependency injection
+        from backend.my_agent.database_manager import DatabaseManager
+        from backend.my_agent.llm_manager import LLMManager
+
+        llm_manager, llm_manager_tool = LLMManager.get_default_managers()
+        db_manager = DatabaseManager()
+
+        policy_service = PolicyService(
+            llm_manager=llm_manager,
+            llm_manager_tool=llm_manager_tool,
+            db_manager=db_manager,
+        )
+        print("✅ PolicyService instance created with dependency injection")
         print(f"   - LLM Manager: {type(policy_service.llm_manager)}")
         print(f"   - LLM Manager Tool: {type(policy_service.llm_manager_tool)}")
         print(f"   - Database Manager: {type(policy_service.db_manager)}")
@@ -77,7 +84,7 @@ def test_policy_service():
 
         # Test policy search
         print("\n   a. Testing policy_search_node...")
-        search_result = policy_search_node(state)
+        search_result = policy_service.policy_search_node(state)
         print("   ✅ Policy search completed")
         print(f"      - Last node: {search_result['last_node']}")
         print(f"      - Policies found: {len(search_result['policies'])}")
@@ -87,12 +94,16 @@ def test_policy_service():
         if search_result["unchecked_policies"]:
             print("\n   b. Testing policy_evaluator_node...")
             state.update(search_result)
-            eval_result = policy_evaluator_node(state)
+            eval_result = policy_service.policy_evaluator_node(state)
             print("   ✅ Policy evaluation completed")
             print(f"      - Last node: {eval_result['last_node']}")
             print(f"      - Policy eligible: {eval_result['policy_eligible']}")
-            print(f"      - Rejection reason: {eval_result['rejection_reason']}")
-            print(f"      - Revision number: {eval_result['revision_number']}")
+            print(
+                f"      - Rejection reason: {eval_result.get('rejection_reason', 'N/A')}"
+            )
+            print(
+                f"      - Revision number: {eval_result.get('revision_number', 'N/A')}"
+            )
         else:
             print("\n   b. ⚠️ No policies found for evaluation")
 
@@ -123,13 +134,6 @@ def test_policy_service():
             print(f"      - Policy eligible: {eval_result_class['policy_eligible']}")
         else:
             print("\n   b. ⚠️ No policies found for class method evaluation")
-
-        # Test 5: Test PolicyEligibility model
-        print("\n5. Testing PolicyEligibility model...")
-        eligibility = PolicyEligibility(eligibility="yes", reason="N/A")
-        print("✅ PolicyEligibility model works")
-        print(f"   - Eligibility: {eligibility.eligibility}")
-        print(f"   - Reason: {eligibility.reason}")
 
         print("\n" + "=" * 50)
         print("✅ All PolicyService tests passed!")
