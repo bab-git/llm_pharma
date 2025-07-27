@@ -1158,9 +1158,9 @@ You can obtain more information about each trial's details and possible relevanc
         with gr.Blocks(
             theme=gr.themes.Default(spacing_size="sm", text_size="lg"),
             css="""
-            /* Darker background for the entire profile section */
+            /* Much lighter background for the entire profile section */
             #profile-section {
-                background-color: #2a3f54;  /* a deep slate blue */
+                background-color: #8ba3c4;  /* much lighter slate blue */
                 padding: 15px;
                 border-radius: 8px;
                 margin-bottom: 20px;
@@ -1190,14 +1190,14 @@ You can obtain more information about each trial's details and possible relevanc
             }
             /* Add a background for the Policy Conflict Resolution section */
             #policy-conflict-section {
-                background-color: #4B0000; /* very dark red */
+                background-color: #c47a7a; /* much lighter red */
                 padding: 15px;
                 border-radius: 8px;
                 margin-bottom: 20px;
             }
             /* Add a background for the Trials Summary section */
             #trials-summary-section {
-                background-color: #184d27; /* dark green */
+                background-color: #7a9c8a; /* much lighter green */
                 padding: 15px;
                 border-radius: 8px;
                 margin-bottom: 20px;
