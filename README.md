@@ -93,6 +93,10 @@ The system includes demo databases for:
 
 ## 🚀 Quick Start
 
+### Demo Video
+
+📹 **[Watch Demo Video](https://www.youtube.com/watch?v=xZOdZzOhFP4)** - See the application in action with real example and usage scenario.
+
 ### Prerequisites
 
 - Python 3.12+
