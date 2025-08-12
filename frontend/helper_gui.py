@@ -373,7 +373,7 @@ Your options:
 
                 # Create a stage entry with session ID
                 stage_entry = (
-                    f"Step {revision_number}: {last_node} (Session: {session_short})"
+                    f"Step: {last_node} (Session: {session_short})"
                 )
                 stages_list.append(stage_entry)
 
