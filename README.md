@@ -412,7 +412,6 @@ For questions, issues, or contributions:
 
 **Bob Hosseini**
 
-- **Email**: [bbkhosseini@gmail.com](mailto:bbkhosseini@gmail.com)
 - **LinkedIn**: [linkedin.com/in/bobhosseini](https://linkedin.com/in/bobhosseini)
 - **GitHub**: [github.com/bab-git](https://github.com/bab-git)
 - **Website**: [bob-hosseini-portfolio.web.app](https://bob-hosseini-portfolio.web.app/)
